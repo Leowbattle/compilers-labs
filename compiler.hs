@@ -1,5 +1,7 @@
 import Data.Char (isSpace, digitToInt, isNumber, isAlphaNum)
 import Debug.Trace (trace)
+import System.Environment
+import System.FilePath.Posix(takeBaseName)
 
 data Token = IntLiteral Integer -- Numbers
     | StrLiteral String
@@ -134,3 +136,72 @@ evaluate (UnOp AbsoluteValue a) = abs (evaluate a)
 
 eval :: String -> Integer
 eval s = evaluate $ parse $ scan s
+
+
+
+
+
+-- Code generation
+
+
+type Stack = [Int]
+
+data TAMInst
+    = LOADL Int -- push Integer into the stack
+    | ADD -- adds two top values in the stack
+    | SUB -- subtract second element of stack from top
+    | MUL -- multiplies top values in the stack
+    | DIV -- divides the second value by the top
+    | NEG -- negates the top of the stack
+    deriving Show
+
+expCode :: AST -> [TAMInst]
+expCode (LitInteger x) = [LOADL (fromIntegral x)]
+
+expCode (BinOp Addition x y) = (expCode x) ++ (expCode y) ++ [ADD]
+expCode (BinOp Subtraction x y) = (expCode x) ++ (expCode y) ++ [SUB]
+expCode (BinOp Multiplication x y) = (expCode x) ++ (expCode y) ++ [MUL]
+expCode (BinOp Division x y) = (expCode x) ++ (expCode y) ++ [DIV]
+
+expCode (UnOp Negation x) = (expCode x) ++ [NEG]
+
+expCode x = error $ show x
+
+
+
+
+-- Virtual machine
+
+execute :: Stack -> TAMInst -> Stack
+execute s (LOADL x) = x : s
+
+execute (x:y:s) ADD = x + y : s
+execute (x:y:s) SUB = x - y : s
+execute (x:y:s) MUL = x * y : s
+execute (x:y:s) DIV = x `div` y : s
+
+execute (x:s) NEG = -x : s
+
+execTAM :: Stack -> [TAMInst] -> Stack
+execTAM s [] = s
+execTAM s (i:is) = execTAM (execute s i) is
+
+
+
+
+compArith :: String -> [TAMInst]
+compArith s = expCode $ parse $ scan s
+
+
+
+-- Main
+
+main :: IO ()
+main = do
+    args <- getArgs
+    let srcFile = head args
+    src <- readFile srcFile
+    let code = compArith src
+    let outPath = (takeBaseName srcFile) ++ ".tam"
+    putStrLn srcFile
+    writeFile outPath (show code)
