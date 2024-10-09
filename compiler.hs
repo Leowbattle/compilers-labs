@@ -1,7 +1,7 @@
+module Compiler where
+
 import Data.Char (isSpace, digitToInt, isNumber, isAlphaNum)
 import Debug.Trace (trace)
-import System.Environment
-import System.FilePath.Posix(takeBaseName, takeExtension)
 import Control.Monad (foldM)
 
 data Token = IntLiteral Integer -- Numbers
@@ -10,7 +10,7 @@ data Token = IntLiteral Integer -- Numbers
     | OpenPar | ClosedPar -- Parentheses
     deriving Show
 
-data Operator = Plus | Minus | Times | Divide | Modulo | Abs
+data Operator = Plus | Minus | Times | Divide | Modulo | Abs | And | Or | Not
     deriving Show
 
 scan :: String -> [Token]
@@ -21,6 +21,7 @@ scan ('-' : s) = Oper Minus : scan s
 scan ('*' : s) = Oper Times : scan s
 scan ('/' : s) = Oper Divide : scan s
 scan ('%' : s) = Oper Modulo : scan s
+scan ('!' : s) = Oper Not : scan s
 
 scan ('(' : s) = OpenPar : scan s
 scan (')' : s) = ClosedPar : scan s
@@ -48,9 +49,9 @@ data AST = LitInteger Integer
     | BinOp BinOperator AST AST
     | UnOp UnOperator AST
     deriving Show
-data BinOperator = Addition | Subtraction | Multiplication | Division | Modulus
+data BinOperator = Addition | Subtraction | Multiplication | Division | Modulus | BinAnd | BinOr
     deriving Show
-data UnOperator = Negation | AbsoluteValue
+data UnOperator = Negation | AbsoluteValue | UnNot
     deriving Show
 
 parse :: [Token] -> AST
@@ -205,29 +206,3 @@ traceTAM s is = do
 
 compArith :: String -> [TAMInst]
 compArith s = expCode $ parse $ scan s
-
-
-
--- Main
-
-main :: IO ()
-main = do
-    args <- getArgs
-    let srcFile = head args
-    case (takeExtension srcFile) of
-        ".exp" -> runCompiler srcFile
-        ".tam" -> runInterpreter srcFile
-
-runCompiler :: String -> IO ()
-runCompiler srcFile = do
-    src <- readFile srcFile
-    let code = compArith src
-    let outPath = (takeBaseName srcFile) ++ ".tam"
-    writeFile outPath (show code)
-
-runInterpreter :: String -> IO ()
-runInterpreter srcFile = do
-    src <- readFile srcFile
-    let code = read src :: [TAMInst]
-    let result = execTAM [] code
-    print result
