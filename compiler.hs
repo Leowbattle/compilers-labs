@@ -1,7 +1,7 @@
 import Data.Char (isSpace, digitToInt, isNumber, isAlphaNum)
 import Debug.Trace (trace)
 import System.Environment
-import System.FilePath.Posix(takeBaseName)
+import System.FilePath.Posix(takeBaseName, takeExtension)
 
 data Token = IntLiteral Integer -- Numbers
     | StrLiteral String
@@ -153,15 +153,15 @@ data TAMInst
     | MUL -- multiplies top values in the stack
     | DIV -- divides the second value by the top
     | NEG -- negates the top of the stack
-    deriving Show
+    deriving (Show, Read)
 
 expCode :: AST -> [TAMInst]
 expCode (LitInteger x) = [LOADL (fromIntegral x)]
 
 expCode (BinOp Addition x y) = (expCode x) ++ (expCode y) ++ [ADD]
-expCode (BinOp Subtraction x y) = (expCode x) ++ (expCode y) ++ [SUB]
+expCode (BinOp Subtraction x y) = (expCode y) ++ (expCode x) ++ [SUB]
 expCode (BinOp Multiplication x y) = (expCode x) ++ (expCode y) ++ [MUL]
-expCode (BinOp Division x y) = (expCode x) ++ (expCode y) ++ [DIV]
+expCode (BinOp Division x y) = (expCode y) ++ (expCode x) ++ [DIV]
 
 expCode (UnOp Negation x) = (expCode x) ++ [NEG]
 
@@ -200,8 +200,20 @@ main :: IO ()
 main = do
     args <- getArgs
     let srcFile = head args
+    case (takeExtension srcFile) of
+        ".exp" -> runCompiler srcFile
+        ".tam" -> runInterpreter srcFile
+
+runCompiler :: String -> IO ()
+runCompiler srcFile = do
     src <- readFile srcFile
     let code = compArith src
     let outPath = (takeBaseName srcFile) ++ ".tam"
-    putStrLn srcFile
     writeFile outPath (show code)
+
+runInterpreter :: String -> IO ()
+runInterpreter srcFile = do
+    src <- readFile srcFile
+    let code = read src :: [TAMInst]
+    let result = execTAM [] code
+    print result
