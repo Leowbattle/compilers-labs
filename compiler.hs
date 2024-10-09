@@ -2,6 +2,7 @@ import Data.Char (isSpace, digitToInt, isNumber, isAlphaNum)
 import Debug.Trace (trace)
 import System.Environment
 import System.FilePath.Posix(takeBaseName, takeExtension)
+import Control.Monad (foldM)
 
 data Token = IntLiteral Integer -- Numbers
     | StrLiteral String
@@ -159,9 +160,9 @@ expCode :: AST -> [TAMInst]
 expCode (LitInteger x) = [LOADL (fromIntegral x)]
 
 expCode (BinOp Addition x y) = (expCode x) ++ (expCode y) ++ [ADD]
-expCode (BinOp Subtraction x y) = (expCode y) ++ (expCode x) ++ [SUB]
+expCode (BinOp Subtraction x y) = (expCode x) ++ (expCode y) ++ [SUB]
 expCode (BinOp Multiplication x y) = (expCode x) ++ (expCode y) ++ [MUL]
-expCode (BinOp Division x y) = (expCode y) ++ (expCode x) ++ [DIV]
+expCode (BinOp Division x y) = (expCode x) ++ (expCode y) ++ [DIV]
 
 expCode (UnOp Negation x) = (expCode x) ++ [NEG]
 
@@ -176,9 +177,9 @@ execute :: Stack -> TAMInst -> Stack
 execute s (LOADL x) = x : s
 
 execute (x:y:s) ADD = x + y : s
-execute (x:y:s) SUB = x - y : s
+execute (x:y:s) SUB = y - x : s
 execute (x:y:s) MUL = x * y : s
-execute (x:y:s) DIV = x `div` y : s
+execute (x:y:s) DIV = y `div` x : s
 
 execute (x:s) NEG = -x : s
 
@@ -187,6 +188,19 @@ execTAM s [] = s
 execTAM s (i:is) = execTAM (execute s i) is
 
 
+
+-- traceTAM
+
+traceInstr :: Stack -> TAMInst -> IO Stack
+traceInstr s i = do
+    let s' = execute s i
+    putStrLn (show i ++ "\t\t" ++ show s')
+    pure s'
+
+traceTAM :: Stack -> [TAMInst] -> IO Stack
+traceTAM s is = do
+    putStrLn ("Initial stack: " ++ show s)
+    foldM traceInstr s is
 
 
 compArith :: String -> [TAMInst]
