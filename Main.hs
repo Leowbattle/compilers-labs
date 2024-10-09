@@ -1,4 +1,8 @@
-import Compiler
+import Scanner
+import Parser
+import TAMVirtualMachine
+import CodeGenerator
+
 import System.Environment
 import System.FilePath.Posix(takeBaseName, takeExtension)
 
