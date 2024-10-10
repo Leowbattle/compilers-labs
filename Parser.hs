@@ -46,11 +46,6 @@ mexpr ts = let (t, ts') = term ts in
         Nothing -> (Nothing, ts)
         Just t' -> case ts' of
             -- [] -> (Nothing, ts)
-            (Oper Times : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp Multiplication t' t''', ts''')
-
             (Oper Divide : ts'') -> let (t'', ts''') = mexpr ts'' in
                 case t'' of
                     Nothing -> (Nothing, ts)
@@ -60,6 +55,11 @@ mexpr ts = let (t, ts') = term ts in
                 case t'' of
                     Nothing -> (Nothing, ts)
                     Just t''' -> (Just $ BinOp Modulus t' t''', ts''')
+
+            (Oper Times : ts'') -> let (t'', ts''') = mexpr ts'' in
+                case t'' of
+                    Nothing -> (Nothing, ts)
+                    Just t''' -> (Just $ BinOp Multiplication t' t''', ts''')
 
             (Oper And : ts'') -> let (t'', ts''') = mexpr ts'' in
                 case t'' of
