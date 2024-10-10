@@ -1,6 +1,5 @@
 module TAMVirtualMachine where
 
-import Scanner
 import Parser
 import CodeGenerator
 import Control.Monad (foldM)
@@ -15,7 +14,20 @@ execute (x:y:s) SUB = y - x : s
 execute (x:y:s) MUL = x * y : s
 execute (x:y:s) DIV = y `div` x : s
 
+execute (x:y:s) AND = case (x, y) of
+    (_, 0) -> 0 : s
+    (0, _) -> 0 : s
+    (_, _) -> 1 : s
+
+execute (x:y:s) OR = case (x, y) of
+    (0, 0) -> 0 : s
+    (_, _) -> 1 : s
+
 execute (x:s) NEG = -x : s
+
+execute (x:s) NOT = case x of
+    0 -> 1 : s
+    _ -> 0 : s
 
 execTAM :: Stack -> [TAMInst] -> Stack
 execTAM s [] = s
@@ -35,7 +47,3 @@ traceTAM :: Stack -> [TAMInst] -> IO Stack
 traceTAM s is = do
     putStrLn ("Initial stack: " ++ show s)
     foldM traceInstr s is
-
-
-compArith :: String -> [TAMInst]
-compArith s = expCode $ parse $ scan s

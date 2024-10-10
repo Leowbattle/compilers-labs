@@ -33,6 +33,11 @@ expr ts = let (m, ts') = mexpr ts in
                     Nothing -> (Nothing, ts)
                     Just t''' -> (Just $ BinOp Subtraction m' t''', ts''')
 
+            (Oper Or : ts'') -> let (t'', ts''') = mexpr ts'' in
+                case t'' of
+                    Nothing -> (Nothing, ts)
+                    Just t''' -> (Just $ BinOp BinOr m' t''', ts''')
+
             ts'' -> (Just m', ts')
 
 mexpr :: [Token] -> (Maybe AST, [Token])
@@ -56,6 +61,11 @@ mexpr ts = let (t, ts') = term ts in
                     Nothing -> (Nothing, ts)
                     Just t''' -> (Just $ BinOp Modulus t' t''', ts''')
 
+            (Oper And : ts'') -> let (t'', ts''') = mexpr ts'' in
+                case t'' of
+                    Nothing -> (Nothing, ts)
+                    Just t''' -> (Just $ BinOp BinAnd t' t''', ts''')
+
             ts'' -> (Just t', ts')
 
 term :: [Token] -> (Maybe AST, [Token])
@@ -65,6 +75,10 @@ term (Oper Minus : ts) = let (t, ts') = expr ts in
     case t of
         Nothing -> (Nothing, Oper Minus : ts)
         Just t' -> (Just (UnOp Negation t'), ts')
+term (Oper Not : ts) = let (t, ts') = expr ts in
+    case t of
+        Nothing -> (Nothing, Oper Not : ts)
+        Just t' -> (Just (UnOp UnNot t'), ts')
 term (StrLiteral "abs" : ts) = let (t, ts') = expr ts in
     case t of
         Nothing -> (Nothing, Oper Minus : ts)

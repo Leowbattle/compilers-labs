@@ -19,10 +19,13 @@ scan ('-' : s) = Oper Minus : scan s
 scan ('*' : s) = Oper Times : scan s
 scan ('/' : s) = Oper Divide : scan s
 scan ('%' : s) = Oper Modulo : scan s
-scan ('!' : s) = Oper Not : scan s
 
 scan ('(' : s) = OpenPar : scan s
 scan (')' : s) = ClosedPar : scan s
+
+scan ('&' : '&' : s) = Oper And : scan s
+scan ('|' : '|' : s) = Oper Or : scan s
+scan ('!' : s) = Oper Not : scan s
 
 scan (c : s)
     | isSpace c = scan s
