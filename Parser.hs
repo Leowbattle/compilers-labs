@@ -8,9 +8,9 @@ data AST = LitInteger Integer
     | BinOp BinOperator AST AST
     | UnOp UnOperator AST
     deriving Show
-data BinOperator = Addition | Subtraction | Multiplication | Division | Modulus
+data BinOperator = Addition | Subtraction | Multiplication | Division | Modulus | BinAnd | BinOr
     deriving Show
-data UnOperator = Negation | AbsoluteValue
+data UnOperator = Negation | AbsoluteValue | UnNot
     deriving Show
 
 newtype Parser a = P (String -> [(a,String)])
@@ -104,7 +104,7 @@ subExp' f = do x <- mexp
                string "-"
                subExp' (\y -> BinOp Subtraction (f x) y)
             <|>
-            do x <- addExp <|> mexp -- This seems odd, but using expr causes infinite recursion??
+            do x <- addExp <|> orExp <|> mexp -- This seems odd, but using expr causes infinite recursion??
                return (f x)
 
 divExp :: Parser AST
@@ -115,12 +115,19 @@ divExp' f = do x <- term
                string "/"
                divExp' (\y -> BinOp Division (f x) y)
             <|>
-            do x <- mulExpr <|> term
+            do x <- mulExpr <|> andExp <|> term
                return (f x)
+
+orExp :: Parser AST
+orExp = do m <- mexp
+           string "||"
+           e <- expr
+           return (BinOp BinOr m e)
 
 expr :: Parser AST
 expr = addExp <|>
        subExp <|>
+       orExp <|>
        mexp
 
 mulExpr :: Parser AST
@@ -129,9 +136,16 @@ mulExpr = do t <- term
              m <- mexp
              return (BinOp Multiplication t m)
 
+andExp :: Parser AST
+andExp = do t <- term
+            string "&&"
+            m <- mexp
+            return (BinOp BinAnd t m)
+
 mexp :: Parser AST
 mexp = mulExpr <|>
        divExp <|>
+       andExp <|>
        term
 
 term :: Parser AST
@@ -148,6 +162,14 @@ term = do pSpace
           t <- term
           return (UnOp Negation t)
 
+       <|>
+
+       do pSpace
+          string "!"
+          pSpace
+          t <- term
+          return (UnOp UnNot t)
+        
        <|>
 
        do pSpace

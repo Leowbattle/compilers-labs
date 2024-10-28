@@ -30,10 +30,10 @@ expCode (BinOp BinAnd x y) = (expCode x) ++ (expCode y) ++ [AND]
 expCode (BinOp BinOr x y) = (expCode x) ++ (expCode y) ++ [OR]
 
 expCode (UnOp Negation x) = (expCode x) ++ [NEG]
--- expCode (UnOp AbsoluteValue x) = (expCode x) ++ [NEG]
+expCode (UnOp AbsoluteValue x) = (expCode x) ++ [NEG]
 expCode (UnOp UnNot x) = (expCode x) ++ [NOT]
 
 expCode x = error $ show x
 
 compArith :: String -> [TAMInst]
-compArith s = expCode $ parse $ scan s
+compArith s = let ((ast, _):_) = parse expr s in expCode ast
