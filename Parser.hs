@@ -1,95 +1,158 @@
 module Parser where
 
 import Scanner
+import Control.Applicative (Alternative, empty, (<|>))
+import Data.Char
 
 data AST = LitInteger Integer
     | BinOp BinOperator AST AST
     | UnOp UnOperator AST
     deriving Show
-data BinOperator = Addition | Subtraction | Multiplication | Division | Modulus | BinAnd | BinOr
+data BinOperator = Addition | Subtraction | Multiplication | Division | Modulus
     deriving Show
-data UnOperator = Negation | AbsoluteValue | UnNot
+data UnOperator = Negation | AbsoluteValue
     deriving Show
 
-parse :: [Token] -> AST
-parse ts = let (e, ts') = expr ts in
-    case e of
-        Nothing -> error "Parse error"
-        Just e' -> e'
+newtype Parser a = P (String -> [(a,String)])
 
-expr :: [Token] -> (Maybe AST, [Token])
-expr ts = let (m, ts') = mexpr ts in
-    case m of
-        Nothing -> (Nothing, ts)
-        Just m' -> case ts' of
-            -- [] -> (Nothing, ts)
-            (Oper Plus : ts'') -> let (t'', ts''') = expr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp Addition m' t''', ts''')
+parse :: Parser a -> String -> [(a,String)]
+parse (P p) src = p src
 
-            (Oper Minus : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp Subtraction m' t''', ts''')
+instance Functor Parser where
+    -- fmap :: (a → b) → Parser a → Parser b
+    fmap f p = P (\src -> map (\(v, src') -> (f v, src'))
+                              (parse p src))
 
-            (Oper Or : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp BinOr m' t''', ts''')
+instance Applicative Parser where
+    -- pure :: a → Parser a
+    pure v = P (\src -> [(v,src)])
 
-            ts'' -> (Just m', ts')
+    -- <∗> :: Parser (a → b) → Parser a → Parser b
+    pg <*> px = P (\src -> concat $
+                    map (\(g,src') -> parse (fmap g px) src')
+                        (parse pg src))
 
-mexpr :: [Token] -> (Maybe AST, [Token])
-mexpr ts = let (t, ts') = term ts in
-    case t of
-        Nothing -> (Nothing, ts)
-        Just t' -> case ts' of
-            -- [] -> (Nothing, ts)
-            (Oper Divide : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp Division t' t''', ts''')
+instance Monad Parser where
+    -- (>>=) :: Parser a → (a → Parser b) → Parser b
+    p >>= f = P (\src -> concat $
+                  map (\(v,src') -> parse (f v) src')
+                    (parse p src))
 
-            (Oper Modulo : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp Modulus t' t''', ts''')
+instance Alternative Parser where
+    -- empty :: Parser a
+    empty = P (\src -> [])
+    -- (<|>) :: Parser a → Parser a → Parser a
+    p <|> q = P (\src -> case parse p src of
+                           [] -> parse q src
+                           rs -> rs)
 
-            (Oper Times : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp Multiplication t' t''', ts''')
 
-            (Oper And : ts'') -> let (t'', ts''') = mexpr ts'' in
-                case t'' of
-                    Nothing -> (Nothing, ts)
-                    Just t''' -> (Just $ BinOp BinAnd t' t''', ts''')
 
-            ts'' -> (Just t', ts')
+item :: Parser Char
+item = P (\src -> case src of
+                      "" -> []
+                      (s:src') -> [(s, src')])
 
-term :: [Token] -> (Maybe AST, [Token])
-term [] = (Nothing, [])
-term (IntLiteral i : ts) = (Just (LitInteger i), ts)
-term (Oper Minus : ts) = let (t, ts') = expr ts in
-    case t of
-        Nothing -> (Nothing, Oper Minus : ts)
-        Just t' -> (Just (UnOp Negation t'), ts')
-term (Oper Not : ts) = let (t, ts') = expr ts in
-    case t of
-        Nothing -> (Nothing, Oper Not : ts)
-        Just t' -> (Just (UnOp UnNot t'), ts')
-term (StrLiteral "abs" : ts) = let (t, ts') = expr ts in
-    case t of
-        Nothing -> (Nothing, Oper Minus : ts)
-        Just t' -> (Just (UnOp AbsoluteValue t'), ts')
+natural :: Parser Int
+natural = P (\src -> let (ds, src') = span isDigit src
+                  in if ds == "" then []
+                                 else [(read ds, src')])
 
-term (OpenPar : ts) = let (e, ts') = expr ts in
-    case e of
-        Nothing -> (Nothing, OpenPar : ts)
-        Just e' -> case ts' of
-            [] -> (Nothing, OpenPar : ts)
-            (ClosedPar : ts'') -> (e, ts'')
-            (t : ts'') -> (Nothing, OpenPar : ts)
+pSpace :: Parser ()
+pSpace = P (\src -> let (ds, src') = span isSpace src
+                    in [((), src')])
 
-term ts = (Nothing, ts)
+pFail :: Parser a
+pFail = P (\src -> [])
+
+satisfy :: Parser a -> (a -> Bool) -> Parser a
+satisfy p cond = do x <- p
+                    if cond x
+                        then return x
+                        else pFail
+
+char :: Char -> Parser Char
+char x = satisfy item (== x)
+
+string :: String -> Parser String
+string [] = return []
+string (x:xs) = do char x
+                   string xs
+                   return (x:xs)
+
+
+
+
+
+int :: Parser AST
+int =  LitInteger . toInteger <$> natural
+
+addExp :: Parser AST
+addExp = do m <- mexp
+            string "+"
+            e <- expr
+            return (BinOp Addition m e)
+
+
+
+
+subExp :: Parser AST
+subExp = subExp' id
+
+subExp' :: (AST -> AST) -> Parser AST
+subExp' f = do x <- mexp
+               string "-"
+               subExp' (\y -> BinOp Subtraction (f x) y)
+            <|>
+            do x <- addExp <|> mexp -- This seems odd, but using expr causes infinite recursion??
+               return (f x)
+
+divExp :: Parser AST
+divExp = divExp' id
+
+divExp' :: (AST -> AST) -> Parser AST
+divExp' f = do x <- term
+               string "/"
+               divExp' (\y -> BinOp Division (f x) y)
+            <|>
+            do x <- mulExpr <|> term
+               return (f x)
+
+expr :: Parser AST
+expr = addExp <|>
+       subExp <|>
+       mexp
+
+mulExpr :: Parser AST
+mulExpr = do t <- term
+             string "*"
+             m <- mexp
+             return (BinOp Multiplication t m)
+
+mexp :: Parser AST
+mexp = mulExpr <|>
+       divExp <|>
+       term
+
+term :: Parser AST
+term = do pSpace
+          x <- int
+          pSpace
+          return x
+
+       <|>
+       
+       do pSpace
+          string "-"
+          pSpace
+          t <- term
+          return (UnOp Negation t)
+
+       <|>
+
+       do pSpace
+          string "("
+          e <- expr
+          string ")"
+          pSpace
+          return e
