@@ -49,8 +49,8 @@ natural = P (\src -> let (ds, src') = span isDigit src
                   in if ds == "" then []
                                  else [(read ds, src')])
 
-pSpace :: Parser ()
-pSpace = P (\src -> let (ds, src') = span isSpace src
+spaces :: Parser ()
+spaces = P (\src -> let (ds, src') = span isSpace src
                     in [((), src')])
 
 pFail :: Parser a

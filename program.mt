@@ -1,7 +1,24 @@
 let var n := 3;
-    var x := 4
+    var x := 4;
+	var z
 in
-if x+1 then
-	n := 3
-else
-	x := 3
+begin
+	n := 4;
+	if x then
+		x := 4
+	else
+	begin
+		x := 3;
+		n := 8
+	end;
+
+	while x + 1 do
+	begin
+		if x then
+			getint(x)
+		else
+			printint(n + 5);
+
+		n := 0
+	end
+end
