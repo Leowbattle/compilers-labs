@@ -1,6 +1,7 @@
 module CodeGenerator where
 
 import Parser
+import TAMParser
 import Scanner
 
 type Stack = [Int]
@@ -18,7 +19,7 @@ data TAMInst
     | NOT -- Boolean not
     deriving (Show, Read)
 
-expCode :: AST -> [TAMInst]
+expCode :: Expr -> [TAMInst]
 expCode (LitInteger x) = [LOADL (fromIntegral x)]
 
 expCode (BinOp Addition x y) = (expCode x) ++ (expCode y) ++ [ADD]
@@ -30,7 +31,7 @@ expCode (BinOp BinAnd x y) = (expCode x) ++ (expCode y) ++ [AND]
 expCode (BinOp BinOr x y) = (expCode x) ++ (expCode y) ++ [OR]
 
 expCode (UnOp Negation x) = (expCode x) ++ [NEG]
-expCode (UnOp AbsoluteValue x) = (expCode x) ++ [NEG]
+-- expCode (UnOp AbsoluteValue x) = (expCode x) ++ [NEG]
 expCode (UnOp UnNot x) = (expCode x) ++ [NOT]
 
 expCode x = error $ show x
