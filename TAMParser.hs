@@ -32,45 +32,48 @@ data UnOperator = Negation | UnNot
 int :: Parser Expr
 int =  LitInteger . toInteger <$> natural
 
-expr :: Parser Expr
-expr =   do x <- mexp
-            xs <- many (do string "+"
-                           m <- mexp
-                           return (Addition, m)
-                        <|>
-                        do string "-"
-                           m <- mexp
-                           return (Subtraction, m))
+operator :: [(String, BinOperator)] -> Parser Expr -> Parser Expr
+operator ops p = do x <- p
+                    xs <- many $ foldl (<|>) empty $ map (\(sym, op) -> do string sym
+                                                                           m <- p
+                                                                           return (op, m)) ops
+                    return (foldl (\a (op, m) -> BinOp op a m) x xs)
 
-            return (foldl (\a (op, m) -> BinOp op a m) x xs)
+expr :: Parser Expr
+expr = logicExp
+
+logicExp :: Parser Expr
+logicExp = operator [("&&", BinAnd), ("||", BinOr)] compExp
+
+compExp :: Parser Expr
+compExp = operator [("<", Less),
+                    ("<=", LessEq),
+                    (">", Greater),
+                    (">=", GreaterEq),
+                    ("==", Equals),
+                    ("!=", NotEquals)] addExp
+
+addExp :: Parser Expr
+addExp = operator [("+", Addition), ("-", Subtraction)] mexp
 
 mexp :: Parser Expr
-mexp =   do x <- term
-            xs <- many (do string "/"
-                           m <- term
-                           return (Division, m)
-                        <|>
-                        do string "*"
-                           m <- term
-                           return (Multiplication, m))
-
-            return (foldl (\a (op, m) -> BinOp op a m) x xs)
+mexp = operator [("*", Multiplication), ("/", Division)] term
 
 term :: Parser Expr
 term = token $ int <|>
                Identifier <$> identifier <|>
- 
+
                do string "-"
                   t <- term
                   return (UnOp Negation t)
- 
+
                <|>
- 
+
                do string "("
                   e <- expr
                   string ")"
                   return e
-      
+
 
 program :: Parser Program
 program = do token $ string "let"

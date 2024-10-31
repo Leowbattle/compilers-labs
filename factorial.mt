@@ -4,9 +4,9 @@ let var n;
 in
 begin
 	getint (n);
-	if n then x := 0 else x := 1;
+	if n < 0 then x := 0 else x := 1;
 	i := 2;
-	while i do
+	while i <= n do
 	begin
 		x := x * i;
 		i := i + 1
