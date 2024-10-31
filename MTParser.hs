@@ -52,7 +52,11 @@ condExp = do cond <- logicExp
              return (Conditional cond x y)
 
 logicExp :: Parser Expr
-logicExp = operator [("&&", BinAnd), ("||", BinOr)] compExp
+logicExp = do token $ string "!"
+              e <- expr
+              return (UnOp UnNot e)
+           <|>
+           operator [("&&", BinAnd), ("||", BinOr)] compExp
 
 compExp :: Parser Expr
 compExp = operator [("<", Less),
@@ -72,15 +76,15 @@ term :: Parser Expr
 term = token $ int <|>
                Identifier <$> identifier <|>
 
-               do string "-"
+               do token $ string "-"
                   t <- term
                   return (UnOp Negation t)
 
                <|>
 
-               do string "("
+               do token $ string "("
                   e <- expr
-                  string ")"
+                  token $ string ")"
                   return e
 
 
