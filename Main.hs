@@ -4,7 +4,7 @@ import TAMVirtualMachine
 import CodeGenerator
 
 import System.Environment
-import System.FilePath.Posix(takeBaseName, takeExtension)
+import System.FilePath.Posix(takeBaseName, takeExtension) -- TODO banned import
 
 main :: IO ()
 main = do
@@ -13,11 +13,6 @@ main = do
     case (takeExtension srcFile) of
         ".mt" -> runCompiler srcFile
         ".tam" -> runInterpreter srcFile
-
--- runCompiler :: String -> IO ()
--- runCompiler srcFile = do
---     src <- readFile srcFile
---     putStr $ show (parseTAM src)
 
 runCompiler :: String -> IO ()
 runCompiler srcFile = do

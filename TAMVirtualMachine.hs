@@ -4,8 +4,6 @@ import Parser
 import CodeGenerator
 import Control.Monad (foldM)
 
--- Virtual machine
-
 execute :: Stack -> TAMInst -> IO Stack
 execute s (LOADL x) = return $ x : s
 
