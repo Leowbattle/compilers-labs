@@ -22,6 +22,7 @@ data Expr = Identifier Identifier
     | LitInteger Integer
     | BinOp BinOperator Expr Expr
     | UnOp UnOperator Expr
+    | Conditional Expr Expr Expr
     deriving Show
 data BinOperator = Addition | Subtraction | Multiplication | Division | BinAnd | BinOr |
                    Less | LessEq | Greater | GreaterEq | Equals | NotEquals
@@ -40,7 +41,15 @@ operator ops p = do x <- p
                     return (foldl (\a (op, m) -> BinOp op a m) x xs)
 
 expr :: Parser Expr
-expr = logicExp
+expr = condExp <|> logicExp
+
+condExp :: Parser Expr
+condExp = do cond <- logicExp
+             token $ string "?"
+             x <- logicExp
+             token $ string ":"
+             y <- expr
+             return (Conditional cond x y)
 
 logicExp :: Parser Expr
 logicExp = operator [("&&", BinAnd), ("||", BinOr)] compExp

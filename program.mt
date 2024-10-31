@@ -20,5 +20,8 @@ begin
 			printint(n + 5);
 
 		n := 0
-	end
+	end;
+
+	z := n < 0 ? 1 :
+	     n > 0 ? 3 : 4
 end
