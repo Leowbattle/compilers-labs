@@ -1,4 +1,4 @@
-module TAMParser where
+module MTParser where
 
 import Parser
 import Control.Applicative (Alternative, empty, many, (<|>))

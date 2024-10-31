@@ -1,7 +1,7 @@
 module CodeGenerator where
 
 import Parser
-import TAMParser
+import MTParser
 import Scanner
 
 type Stack = [Int]

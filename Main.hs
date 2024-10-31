@@ -1,6 +1,6 @@
 import Scanner
 import Parser
-import TAMParser
+import MTParser
 import TAMVirtualMachine
 import CodeGenerator
 
