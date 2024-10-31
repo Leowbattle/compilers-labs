@@ -31,4 +31,5 @@ runInterpreter srcFile = do
     src <- readFile srcFile
     let code = read src :: [TAMInst]
     result <- execTAM [] code
+    putStr "Final stack: "
     print result

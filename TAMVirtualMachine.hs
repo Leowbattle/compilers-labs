@@ -33,12 +33,13 @@ execute (x:s) NOT = return $ case x of
     0 -> 1 : s
     _ -> 0 : s
 
-execute s HALT = error "halt" -- TODO
+execute s HALT = mempty
 
-execute s GETINT = do x <- getLine
+execute s GETINT = do putStrLn "Enter a number: "
+                      x <- getLine
                       return (read x : s)
 
-execute (x:s) PUTINT = print x >> pure s
+execute (x:s) PUTINT = putStr "output > " >> print x >> pure s
 
 execute s (LABEL l) = return s
 
