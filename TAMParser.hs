@@ -57,70 +57,49 @@ mexp =   do x <- term
             return (foldl (\a (op, m) -> BinOp op a m) x xs)
 
 term :: Parser Expr
-term = do spaces
-          t <- int <|>
+term = token $ int <|>
                Identifier <$> identifier <|>
-
+ 
                do string "-"
                   t <- term
                   return (UnOp Negation t)
-
+ 
                <|>
-
+ 
                do string "("
                   e <- expr
                   string ")"
                   return e
-          spaces
-          return t        
+      
 
 program :: Parser Program
-program = do spaces
-             string "let"
-             spaces
+program = do token $ string "let"
              ds <- declarations
-             spaces
-             string "in"
-             spaces
+             token $ string "in"
              c <- command
-             spaces
              return (Program ds c)
 
 declarations :: Parser [Declaration]
-declarations = do spaces
-                  d <- declaration
-                  spaces
-                  string ";"
-                  spaces
+declarations = do d <- declaration
+                  token $ string ";"
                   ds <- declarations
-                  spaces
                   return (d:ds)
                <|>
                do
-                  spaces
                   d <- declaration
-                  spaces
                   return [d]
 
 declaration :: Parser Declaration
-declaration = do spaces
-                 string "var"
-                 spaces
+declaration = do token $ string "var"
                  id <- identifier
-                 spaces
-                 string ":="
-                 spaces
+                 token $ string ":="
                  e <- expr
-                 spaces
                  return (Var id e)
 
                <|>
 
-               do spaces
-                  string "var"
-                  spaces
+               do token $ string "var"
                   id <- identifier
-                  spaces
                   return (Var id (LitInteger 0))
 
 identifier :: Parser Identifier
@@ -129,96 +108,60 @@ identifier = do c <- satisfy item isAlpha
                 return (c:cs)
 
 command :: Parser Command
-command = do spaces
-             string "if"
-             spaces
+command = do token $ string "if"
              e <- expr
-             spaces
-             string "then"
-             spaces
+             token $ string "then"
              yes <- command
-             spaces
-             string "else"
-             spaces
+             token $ string "else"
              no <- command
-             spaces
              return (If e yes no)
 
           <|>
 
-          do spaces
-             string "while"
-             spaces
+          do token $ string "while"
              e <- expr
-             spaces
-             string "do"
-             spaces
+             token $ string "do"
              c <- command
-             spaces
              return (While e c)
 
           <|>
 
-          do spaces
-             string "getint"
-             spaces
-             string "("
-             spaces
+          do token $ string "getint"
+             token $ string "("
              id <- identifier
-             spaces
-             string ")"
-             spaces
+             token $ string ")"
              return (GetInt id)
 
           <|>
 
-          do spaces
-             string "printint"
-             spaces
-             string "("
-             spaces
+          do token $ string "printint"
+             token $ string "("
              e <- expr
-             spaces
-             string ")"
-             spaces
+             token $ string ")"
              return (PrintInt e)
 
           <|>
 
-          do spaces
-             string "begin"
-             spaces
+          do token $ string "begin"
              cs <- commands
-             spaces
-             string "end"
-             spaces
+             token $ string "end"
              return (BeginEnd cs)
 
           <|>
 
-          do spaces
-             id <- identifier
-             spaces
-             string ":="
-             spaces
+          do id <- identifier
+             token $ string ":="
              e <- expr
-             spaces
              return (Assign id e)
 
 commands :: Parser [Command]
-commands =     do spaces
-                  c <- command
-                  spaces
-                  string ";"
-                  spaces
+commands =     do c <- command
+                  token $ string ";"
                   cs <- commands
-                  spaces
                   return (c:cs)
                <|>
                do
-                  spaces
                   c <- command
-                  spaces
                   return [c]
 
 parseTAM :: String -> Program

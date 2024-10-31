@@ -70,3 +70,10 @@ string [] = return []
 string (x:xs) = do char x
                    string xs
                    return (x:xs)
+
+token :: Parser a -> Parser a
+token p = do
+    spaces
+    v <- p
+    spaces
+    return v
