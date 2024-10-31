@@ -153,4 +153,4 @@ compileVarInit :: [Declaration] -> [TAMInst]
 compileVarInit decls = concat (map (\(Var _ expr) -> expCode [] expr) decls)
 
 compileProgram :: Program -> [TAMInst]
-compileProgram (Program decls cmd) = compileVarInit decls ++ commCode (compileDeclarations decls) cmd
+compileProgram (Program decls cmd) = compileVarInit decls ++ commCode (compileDeclarations decls) cmd ++ [HALT]

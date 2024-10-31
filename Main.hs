@@ -30,5 +30,5 @@ runInterpreter :: String -> IO ()
 runInterpreter srcFile = do
     src <- readFile srcFile
     let code = read src :: [TAMInst]
-    let result = execTAM [] code
+    result <- execTAM [] code
     print result
