@@ -180,5 +180,5 @@ commands =     do c <- command
                   c <- command
                   return [c]
 
-parseTAM :: String -> Program
-parseTAM s = let ((t, _):_) = parse program s in t
+parseMT :: String -> Program
+parseMT s = let ((t, _):_) = parse program s in t

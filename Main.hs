@@ -1,4 +1,3 @@
-import Scanner
 import Parser
 import MTParser
 import TAMVirtualMachine
@@ -15,17 +14,17 @@ main = do
         ".mt" -> runCompiler srcFile
         ".tam" -> runInterpreter srcFile
 
-runCompiler :: String -> IO ()
-runCompiler srcFile = do
-    src <- readFile srcFile
-    putStr $ show (parseTAM src)
-
 -- runCompiler :: String -> IO ()
 -- runCompiler srcFile = do
 --     src <- readFile srcFile
---     let code = compArith src
---     let outPath = (takeBaseName srcFile) ++ ".tam"
---     writeFile outPath (show code)
+--     putStr $ show (parseTAM src)
+
+runCompiler :: String -> IO ()
+runCompiler srcFile = do
+    src <- readFile srcFile
+    let code = compileProgram $ parseMT src
+    let outPath = (takeBaseName srcFile) ++ ".tam"
+    writeFile outPath (show code)
 
 runInterpreter :: String -> IO ()
 runInterpreter srcFile = do

@@ -1,6 +1,5 @@
 module Parser where
 
-import Scanner
 import Control.Applicative (Alternative, empty, (<|>))
 import Data.Char
 
