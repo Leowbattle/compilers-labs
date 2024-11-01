@@ -3,69 +3,90 @@ module TAMVirtualMachine where
 import Parser
 import CodeGenerator
 import Control.Monad (foldM)
+import Data.List
+import Data.Maybe
 
-execute :: Stack -> TAMInst -> IO Stack
-execute s (LOADL x) = return $ x : s
+step :: Stack -> [TAMInst] -> Int -> IO (Stack, Int)
+step s prog pc = case prog !! pc of
+    LOADL x -> return (x : s, pc + 1)
 
-execute (x:y:s) ADD = return $ x + y : s
-execute (x:y:s) SUB = return $ y - x : s
-execute (x:y:s) MUL = return $ x * y : s
-execute (x:y:s) DIV = return $ y `div` x : s
+    ADD -> let (x:y:s') = s in return (x + y : s', pc + 1)
+    SUB -> let (x:y:s') = s in return (y - x : s', pc + 1)
+    MUL -> let (x:y:s') = s in return (x * y : s', pc + 1)
+    DIV -> let (x:y:s') = s in return (y `div` x : s', pc + 1)
 
-execute (x:y:s) LSS = return $ (if x < y then 1 else 0) : s
-execute (x:y:s) GRT = return $ (if x > y then 1 else 0) : s
-execute (x:y:s) EQL = return $ (if x == y then 1 else 0) : s
+    LSS -> let (y:x:s') = s in return ((if x < y then 1 else 0) : s', pc + 1)
+    GRT -> let (y:x:s') = s in return ((if x > y then 1 else 0) : s', pc + 1)
+    EQL -> let (x:y:s') = s in return ((if x == y then 1 else 0) : s', pc + 1)
 
-execute (x:y:s) AND = return $ case (x, y) of
-    (_, 0) -> 0 : s
-    (0, _) -> 0 : s
-    (_, _) -> 1 : s
+    AND -> let (x:y:s') = s in return (boolAnd x y : s', pc + 1)
+    OR ->  let (x:y:s') = s in return (boolOr x y : s', pc + 1)
+    NOT -> let (x:s')   = s in return (boolNot x : s', pc + 1)
 
-execute (x:y:s) OR = return $ case (x, y) of
-    (0, 0) -> 0 : s
-    (_, _) -> 1 : s
+    NEG -> let (x:s')   = s in return (-x : s', pc + 1)
 
-execute (x:s) NEG = return $ -x : s
+    HALT -> return (s, -1)
 
-execute (x:s) NOT = return $ case x of
-    0 -> 1 : s
-    _ -> 0 : s
+    GETINT -> do putStrLn "Enter a number: "
+                 x <- getLine
+                 return (read x : s, pc + 1)
 
-execute s HALT = mempty
+    PUTINT -> let (x:s') = s in putStr "output > " >> print x >> pure (s', pc + 1)
+    
+    LABEL l -> return (s, pc + 1)
 
-execute s GETINT = do putStrLn "Enter a number: "
-                      x <- getLine
-                      return (read x : s)
+    JUMP l -> return (s, lookupLabel prog l)
+    JUMPIFZ l -> let (x:s') = s in return (s', if x == 0 then lookupLabel prog l else pc + 1)
 
-execute (x:s) PUTINT = putStr "output > " >> print x >> pure s
+    LOAD a -> return ((s !! (varLookup s a)) : s, pc + 1)
 
-execute s (LABEL l) = return s
+    STORE a -> let (x:s') = s in
+                   return (setVar s' (varLookup s' a) x, pc + 1)
 
-execute s (JUMP l) = error "JUMP unimplemented"
-execute s (JUMPIFZ l) = error "JUMPIFZ unimplemented"
+lookupLabel :: [TAMInst] -> Int -> Int
+lookupLabel prog l = fromJust $ findIndex (\x -> case x of
+    LABEL l' -> l == l'
+    _ -> False) prog
 
-execute s (LOAD a) = return $ varLookup s a : s
-execute (x:s) (STORE a) = return $ let (as, _:bs) = splitAt a s in
-                                       as ++ [x] ++ bs
+boolAnd :: Int -> Int -> Int
+boolAnd x y = case (x, y) of
+    (_, 0) -> 0
+    (0, _) -> 0
+    (_, _) -> 1
+
+boolOr :: Int -> Int -> Int
+boolOr x y = case (x, y) of
+    (0, 0) -> 0
+    (_, _) -> 1
+
+boolNot :: Int -> Int
+boolNot x = case x of
+    0 -> 1
+    1 -> 0
 
 varLookup :: Stack -> Int -> Int
-varLookup s a = s !! (length s - a - 1)
+varLookup s a = length s - a - 1
 
-execTAM :: Stack -> [TAMInst] -> IO Stack
-execTAM s is = foldM execute s is
+setVar :: Stack -> Int -> Int -> Stack
+setVar s a x = let (as, _:bs) = splitAt a s in
+                   as ++ [x] ++ bs
 
+-- execTAM :: Stack -> [TAMInst] -> IO Stack
+-- execTAM s is = foldM execute s is
 
+execTAM :: Stack -> Int -> [TAMInst] -> IO (Stack, Int)
+execTAM s pc prog = do (s', pc') <- step s prog pc
+                       if pc' == -1 then
+                           return (s', -1)
+                       else
+                           execTAM s' pc' prog
 
 -- traceTAM
 
-traceInstr :: Stack -> TAMInst -> IO Stack
-traceInstr s i = do
-    let s' = execute s i
-    stack <- s'
-    putStrLn (show i ++ "\t\t" ++ show stack)
-    s'
-
-traceTAM :: Stack -> [TAMInst] -> IO Stack
-traceTAM s is = do
-    putStrLn ("Initial stack: " ++ show s)
-    foldM traceInstr s is
+traceTAM :: Stack -> Int -> [TAMInst] -> IO (Stack, Int)
+traceTAM s pc prog = do (s', pc') <- step s prog pc
+                        putStrLn (show (prog !! pc) ++ "\t\t" ++ show s')
+                        if pc' == -1 then
+                           return (s', -1)
+                        else
+                           traceTAM s' pc' prog

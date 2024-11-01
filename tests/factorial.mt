@@ -8,6 +8,7 @@ begin
 	i := 2;
 	while i <= n do
 	begin
+		printint(x);
 		x := x * i;
 		i := i + 1
 	end;
