@@ -3,7 +3,6 @@ module CodeGenerator where
 import Parser
 import MTParser
 import Data.List (find)
-import Data.Maybe (fromJust)
 
 type Stack = [Int]
 
@@ -36,6 +35,10 @@ data TAMInst
     deriving (Show, Read)
 
 type VarEnv = [(String, Int)]
+
+fromJust :: Maybe a -> a
+fromJust Nothing = error "Nothing"
+fromJust (Just x) = x
 
 varAddr :: VarEnv -> String -> Int
 varAddr v x = snd $ fromJust (find ((== x) . fst) v)

@@ -4,7 +4,6 @@ import Parser
 import CodeGenerator
 import Control.Monad (foldM)
 import Data.List
-import Data.Maybe
 
 step :: Stack -> [TAMInst] -> Int -> IO (Stack, Int)
 step s prog pc = case prog !! pc of

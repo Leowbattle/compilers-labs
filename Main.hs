@@ -4,7 +4,12 @@ import TAMVirtualMachine
 import CodeGenerator
 
 import System.Environment ( getArgs )
-import System.FilePath.Posix(takeBaseName, takeExtension) -- TODO banned import
+
+takeExtension :: String -> String
+takeExtension = dropWhile (/= '.')
+
+removeExtension :: String -> String
+removeExtension = takeWhile (/= '.')
 
 main :: IO ()
 main = do
@@ -19,7 +24,7 @@ runCompiler :: String -> IO ()
 runCompiler srcFile = do
     src <- readFile srcFile
     let code = compileProgram $ parseMT src
-    let outPath = (takeBaseName srcFile) ++ ".tam"
+    let outPath = (removeExtension srcFile) ++ ".tam"
     writeFile outPath (show code)
 
 runInterpreter :: String -> Bool -> IO ()
