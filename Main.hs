@@ -6,24 +6,24 @@ import CodeGenerator
 import System.Environment ( getArgs )
 
 takeExtension :: String -> String
-takeExtension = dropWhile (/= '.')
+takeExtension s = reverse $ takeWhile (/= '.') $ reverse s
 
 removeExtension :: String -> String
-removeExtension = takeWhile (/= '.')
+removeExtension s = reverse $ tail $ dropWhile (/= '.') $ reverse s
 
 main :: IO ()
 main = do
     args <- getArgs
     let srcFile = head args
     let trace = "--trace" `elem` args
-    case (takeExtension srcFile) of
-        ".mt" -> runCompiler srcFile
-        ".tam" -> runInterpreter srcFile trace
+    case takeExtension srcFile of
+        "mt" -> runCompiler srcFile
+        "tam" -> runInterpreter srcFile trace
 
 runCompiler :: String -> IO ()
 runCompiler srcFile = do
     src <- readFile srcFile
-    let code = compileProgram $ parseMT src
+    let code = compileMT src
     let outPath = (removeExtension srcFile) ++ ".tam"
     writeFile outPath (show code)
 

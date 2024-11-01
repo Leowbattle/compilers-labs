@@ -43,33 +43,54 @@ fromJust (Just x) = x
 varAddr :: VarEnv -> String -> Int
 varAddr v x = snd $ fromJust (find ((== x) . fst) v)
 
-expCode :: VarEnv -> Expr -> [TAMInst]
-expCode v (LitInteger x) = [LOADL (fromIntegral x)]
-expCode v (Identifier x) = [LOAD $ varAddr v x]
+binOpCode :: [TAMInst] -> VarEnv -> Expr -> Expr -> ST [TAMInst]
+binOpCode inst v x y = do xcode <- expCode v x
+                          ycode <- expCode v y
+                          return $ xcode ++ ycode ++ inst
 
-expCode v (BinOp Addition x y) = (expCode v x) ++ (expCode v y) ++ [ADD]
-expCode v (BinOp Subtraction x y) = (expCode v x) ++ (expCode v y) ++ [SUB]
-expCode v (BinOp Multiplication x y) = (expCode v x) ++ (expCode v y) ++ [MUL]
-expCode v (BinOp Division x y) = (expCode v x) ++ (expCode v y) ++ [DIV]
+unOpCode :: [TAMInst] -> VarEnv -> Expr -> ST [TAMInst]
+unOpCode inst v x = do xcode <- expCode v x
+                       return $ xcode ++ inst
 
-expCode v (BinOp BinAnd x y) = (expCode v x) ++ (expCode v y) ++ [AND]
-expCode v (BinOp BinOr x y) = (expCode v x) ++ (expCode v y) ++ [OR]
+expCode :: VarEnv -> Expr -> ST [TAMInst]
 
-expCode v (BinOp Less x y) = (expCode v x) ++ (expCode v y) ++ [LSS]
-expCode v (BinOp LessEq x y) = (expCode v x) ++ (expCode v y) ++ [LOADL 1, ADD, LSS]
+expCode v (LitInteger x) = return [LOADL (fromIntegral x)]
+expCode v (Identifier x) = return [LOAD $ varAddr v x]
 
-expCode v (BinOp Greater x y) = (expCode v x) ++ (expCode v y) ++ [GRT]
-expCode v (BinOp GreaterEq x y) = (expCode v x) ++ (expCode v y) ++ [LOADL 1, SUB, GRT]
+expCode v (BinOp Addition x y) = binOpCode [ADD] v x y
+expCode v (BinOp Subtraction x y) = binOpCode [SUB] v x y
+expCode v (BinOp Multiplication x y) = binOpCode [MUL] v x y
+expCode v (BinOp Division x y) = binOpCode [DIV] v x y
 
-expCode v (BinOp Equals x y) = (expCode v x) ++ (expCode v y) ++ [EQL]
-expCode v (BinOp NotEquals x y) = (expCode v x) ++ (expCode v y) ++ [EQL, NOT]
+expCode v (BinOp BinAnd x y) = binOpCode [AND] v x y
+expCode v (BinOp BinOr x y) = binOpCode [OR] v x y
 
-expCode v (UnOp Negation x) = (expCode v x) ++ [NEG]
-expCode v (UnOp UnNot x) = (expCode v x) ++ [NOT]
+expCode v (BinOp Less x y) = binOpCode [LSS] v x y
+expCode v (BinOp LessEq x y) = binOpCode [LOADL 1, ADD, LSS] v x y
 
--- expCode v (Conditional cond yes no) = 
+expCode v (BinOp Greater x y) = binOpCode [GRT] v x y
+expCode v (BinOp GreaterEq x y) = binOpCode [LOADL 1, SUB, GRT] v x y
 
-expCode v x = error $ show x
+expCode v (BinOp Equals x y) = binOpCode [EQL] v x y
+expCode v (BinOp NotEquals x y) = binOpCode [EQL, NOT] v x y
+
+expCode v (UnOp Negation x) = unOpCode [NEG] v x
+expCode v (UnOp UnNot x) = unOpCode [NOT] v x
+
+expCode v (Conditional cond yes no) = do condcode <- expCode v cond
+                                         yescode <- expCode v yes
+                                         l1 <- getLabel
+                                         nocode <- expCode v no
+                                         l2 <- getLabel
+                                         return (condcode ++
+                                                 [JUMPIFZ l1] ++
+                                                 yescode ++
+                                                 [JUMP l2, LABEL l1] ++
+                                                 nocode ++
+                                                 [LABEL l2])
+                                         
+
+-- expCode v x = error $ show x
 
 -- compExpr v s = let ((e, _):_) = parse expr s in expCode v e
 
@@ -112,9 +133,11 @@ getLabel = S (\s -> (s, s + 1))
 
 
 compCmd :: VarEnv -> Command -> ST [TAMInst]
-compCmd v (Assign x expr) = return $ (expCode v expr) ++ [STORE $ varAddr v x]
 
-compCmd v (If expr yes no) = do  let ecode = expCode v expr
+compCmd v (Assign x expr) = do ecode <- expCode v expr
+                               return $ ecode ++ [STORE $ varAddr v x]
+
+compCmd v (If expr yes no) = do  ecode <- expCode v expr
                                  yescode <- compCmd v yes
                                  l1 <- getLabel
                                  nocode <- compCmd v no
@@ -126,7 +149,7 @@ compCmd v (If expr yes no) = do  let ecode = expCode v expr
                                          nocode ++
                                          [LABEL l2])
 
-compCmd v (While expr cmd) = do  let ecode = expCode v expr
+compCmd v (While expr cmd) = do  ecode <- expCode v expr
                                  l1 <- getLabel
                                  cmdCode <- compCmd v cmd
                                  l2 <- getLabel
@@ -136,8 +159,9 @@ compCmd v (While expr cmd) = do  let ecode = expCode v expr
                                          cmdCode ++
                                          [JUMP l1, LABEL l2])
 
-compCmd v (GetInt x) = return $ [GETINT, STORE $ varAddr v x]
-compCmd v (PrintInt expr) = return $ expCode v expr ++ [PUTINT]
+compCmd v (GetInt x) = return [GETINT, STORE $ varAddr v x]
+compCmd v (PrintInt expr) = do ecode <- expCode v expr
+                               return $ ecode ++ [PUTINT]
 
 compCmd v (BeginEnd []) = return []
 compCmd v (BeginEnd (c:cs)) = do  ccode <- compCmd v c
@@ -149,11 +173,16 @@ compCmd v (BeginEnd (c:cs)) = do  ccode <- compCmd v c
 commCode :: VarEnv -> Command -> [TAMInst]
 commCode v c = fst $ app (compCmd v c) 0
 
-compileDeclarations :: [Declaration] -> VarEnv
-compileDeclarations decls = [(id, i) | (Var id _, i) <- zip decls [0..]]
+compileVars :: [TAMInst] -> [Declaration] -> VarEnv -> ST (VarEnv, [TAMInst])
+compileVars inst [] v = return (v, inst)
+compileVars inst ((Var id e):ds) v = do let v' = (id, length v):v
+                                        ecode <- expCode v e
+                                        compileVars (inst ++ ecode) ds v'
 
-compileVarInit :: [Declaration] -> [TAMInst]
-compileVarInit decls = concat (map (\(Var _ expr) -> expCode [] expr) decls)
+compileProgram :: Program -> ST [TAMInst]
+compileProgram (Program decls cmd) = do (v, initCode) <- compileVars [] decls []
+                                        cmdCode <- compCmd v cmd
+                                        return $ initCode ++ cmdCode ++ [HALT]
 
-compileProgram :: Program -> [TAMInst]
-compileProgram (Program decls cmd) = compileVarInit decls ++ commCode (compileDeclarations decls) cmd ++ [HALT]
+compileMT :: String -> [TAMInst]
+compileMT s = fst $ app (compileProgram $ parseMT s) 0

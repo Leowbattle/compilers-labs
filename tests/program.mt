@@ -1,8 +1,9 @@
 let var n := 3;
     var x := 4;
-	var z
+	var z := n + x
 in
 begin
+	printint(z);
 	n := 4;
 	if x then
 		x := 4
