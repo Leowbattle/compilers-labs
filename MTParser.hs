@@ -4,14 +4,15 @@ import Parser
 import Control.Applicative (Alternative, empty, many, (<|>))
 import Data.Char
 
-data Program = Program [Declaration] Command
+data Program = LetIn [Declaration] Command
                deriving Show
 
 type Identifier = String
-data Declaration = Var Identifier Expr deriving Show
+data Declaration = VarDecl Identifier | VarInit Identifier Expr
+                   deriving Show
 
-data Command = Assign Identifier Expr
-             | If Expr Command Command
+data Command = Assignment Identifier Expr
+             | IfThenElse Expr Command Command
              | While Expr Command
              | GetInt Identifier
              | PrintInt Expr
@@ -93,7 +94,7 @@ program = do token $ string "let"
              ds <- declarations
              token $ string "in"
              c <- command
-             return (Program ds c)
+             return (LetIn ds c)
 
 declarations :: Parser [Declaration]
 declarations = do d <- declaration
@@ -110,13 +111,13 @@ declaration = do token $ string "var"
                  id <- identifier
                  token $ string ":="
                  e <- expr
-                 return (Var id e)
+                 return (VarInit id e)
 
                <|>
 
                do token $ string "var"
                   id <- identifier
-                  return (Var id (LitInteger 0))
+                  return (VarDecl id)
 
 identifier :: Parser Identifier
 identifier = do c <- satisfy item isAlpha
@@ -130,7 +131,7 @@ command = do token $ string "if"
              yes <- command
              token $ string "else"
              no <- command
-             return (If e yes no)
+             return (IfThenElse e yes no)
 
           <|>
 
@@ -168,7 +169,7 @@ command = do token $ string "if"
           do id <- identifier
              token $ string ":="
              e <- expr
-             return (Assign id e)
+             return (Assignment id e)
 
 commands :: Parser [Command]
 commands =     do c <- command

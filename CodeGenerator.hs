@@ -3,6 +3,7 @@ module CodeGenerator where
 import Parser
 import MTParser
 import Data.List (find)
+import State
 
 type Stack = [Int]
 
@@ -43,16 +44,16 @@ fromJust (Just x) = x
 varAddr :: VarEnv -> String -> Int
 varAddr v x = snd $ fromJust (find ((== x) . fst) v)
 
-binOpCode :: [TAMInst] -> VarEnv -> Expr -> Expr -> ST [TAMInst]
+binOpCode :: [TAMInst] -> VarEnv -> Expr -> Expr -> ST Int [TAMInst]
 binOpCode inst v x y = do xcode <- expCode v x
                           ycode <- expCode v y
                           return $ xcode ++ ycode ++ inst
 
-unOpCode :: [TAMInst] -> VarEnv -> Expr -> ST [TAMInst]
+unOpCode :: [TAMInst] -> VarEnv -> Expr -> ST Int [TAMInst]
 unOpCode inst v x = do xcode <- expCode v x
                        return $ xcode ++ inst
 
-expCode :: VarEnv -> Expr -> ST [TAMInst]
+expCode :: VarEnv -> Expr -> ST Int [TAMInst]
 
 expCode v (LitInteger x) = return [LOADL (fromIntegral x)]
 expCode v (Identifier x) = return [LOAD $ varAddr v x]
@@ -94,60 +95,27 @@ expCode v (Conditional cond yes no) = do condcode <- expCode v cond
 
 -- compExpr v s = let ((e, _):_) = parse expr s in expCode v e
 
+getLabel :: ST Int Int
+getLabel = do n <- stState
+              stUpdate (n + 1)
+              return n
 
+compCmd :: VarEnv -> Command -> ST Int [TAMInst]
 
+compCmd v (Assignment x expr) = do ecode <- expCode v expr
+                                   return $ ecode ++ [STORE $ varAddr v x]
 
-
-type Label = Int
-type State = Label
-
-newtype ST a = S (State -> (a, State))
-
-app :: ST a -> State -> (a,State)
-app (S st) x = st x
-
-instance Functor ST where
-   -- fmap :: (a -> b) -> ST a -> ST b
-   fmap g st = S (\s -> let (x,s') = app st s in (g x, s'))
-
-instance Applicative ST where
-   -- pure :: a -> ST a
-   pure x = S (\s -> (x,s))
-
-   -- (<*>) :: ST (a -> b) -> ST a -> ST b
-   stf <*> stx = S (\s ->
-      let (f,s')  = app stf s
-          (x,s'') = app stx s' in (f x, s''))
-
-instance Monad ST where
-   -- return :: a -> ST a
-   return = pure
-
-   -- (>>=) :: ST a -> (a -> ST b) -> ST b
-   st >>= f = S (\s -> let (x,s') = app st s in app (f x) s')
-
-getLabel :: ST Int
-getLabel = S (\s -> (s, s + 1))
-
-
-
-
-compCmd :: VarEnv -> Command -> ST [TAMInst]
-
-compCmd v (Assign x expr) = do ecode <- expCode v expr
-                               return $ ecode ++ [STORE $ varAddr v x]
-
-compCmd v (If expr yes no) = do  ecode <- expCode v expr
-                                 yescode <- compCmd v yes
-                                 l1 <- getLabel
-                                 nocode <- compCmd v no
-                                 l2 <- getLabel
-                                 return (ecode ++
-                                         [JUMPIFZ l1] ++
-                                         yescode ++
-                                         [JUMP l2, LABEL l1] ++
-                                         nocode ++
-                                         [LABEL l2])
+compCmd v (IfThenElse expr yes no) = do  ecode <- expCode v expr
+                                         yescode <- compCmd v yes
+                                         l1 <- getLabel
+                                         nocode <- compCmd v no
+                                         l2 <- getLabel
+                                         return (ecode ++
+                                                 [JUMPIFZ l1] ++
+                                                 yescode ++
+                                                 [JUMP l2, LABEL l1] ++
+                                                 nocode ++
+                                                 [LABEL l2])
 
 compCmd v (While expr cmd) = do  ecode <- expCode v expr
                                  l1 <- getLabel
@@ -168,21 +136,19 @@ compCmd v (BeginEnd (c:cs)) = do  ccode <- compCmd v c
                                   cscode <- compCmd v (BeginEnd cs)
                                   return $ ccode ++ cscode
 
--- compCmd v s = let ((c, _):_) = parse command s in app $ compCmd v c
-
-commCode :: VarEnv -> Command -> [TAMInst]
-commCode v c = fst $ app (compCmd v c) 0
-
-compileVars :: [TAMInst] -> [Declaration] -> VarEnv -> ST (VarEnv, [TAMInst])
+compileVars :: [TAMInst] -> [Declaration] -> VarEnv -> ST Int (VarEnv, [TAMInst])
 compileVars inst [] v = return (v, inst)
-compileVars inst ((Var id e):ds) v = do let v' = (id, length v):v
-                                        ecode <- expCode v e
-                                        compileVars (inst ++ ecode) ds v'
+compileVars inst ((VarDecl id):ds) v = do let v' = (id, length v):v
+                                          -- ecode <- expCode v e
+                                          compileVars (inst ++ [LOADL 0]) ds v'
+compileVars inst ((VarInit id e):ds) v = do let v' = (id, length v):v
+                                            ecode <- expCode v e
+                                            compileVars (inst ++ ecode) ds v'
 
-compileProgram :: Program -> ST [TAMInst]
-compileProgram (Program decls cmd) = do (v, initCode) <- compileVars [] decls []
-                                        cmdCode <- compCmd v cmd
-                                        return $ initCode ++ cmdCode ++ [HALT]
+compileProgram :: Program -> ST Int [TAMInst]
+compileProgram (LetIn decls cmd) = do (v, initCode) <- compileVars [] decls []
+                                      cmdCode <- compCmd v cmd
+                                      return $ initCode ++ cmdCode ++ [HALT]
 
 compileMT :: String -> [TAMInst]
 compileMT s = fst $ app (compileProgram $ parseMT s) 0
