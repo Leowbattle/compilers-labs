@@ -31,10 +31,9 @@ runInterpreter :: String -> Bool -> IO ()
 runInterpreter srcFile trace = do
     src <- readFile srcFile
     let code = read src :: [TAMInst]
-    (result, _) <- if trace then
-        traceTAM [] 0 code
+    result <- if trace then
+        traceTAM code
     else
-        execTAM [] 0 code
-    -- (result, _) <- traceTAM [] 0 code
+        runTAM code
     putStr "Final stack: "
     print result

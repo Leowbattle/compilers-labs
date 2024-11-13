@@ -12,7 +12,7 @@ data TAMState = TAMState {
     tsStack :: Stack
 }
 
-type TAMSt a = ST TAMState a
+type TAMSt a = StateIO TAMState a
 
 tsPush :: Int -> TAMState -> TAMState
 tsPush x ts = ts {tsStack = x : (tsStack ts)}
@@ -27,30 +27,54 @@ tsSetCounter i ts = ts {tsCounter = i}
 tsInstruction :: TAMState -> TAMInst
 tsInstruction ts = (tsCode ts)!!(tsCounter ts)
 
+instructionT :: TAMSt TAMInst
+instructionT = do (TAMState tsCode _ _) <- stStateT
+                  pc <- counterT
+                  return $ tsCode !! pc
+
 counterT :: TAMSt Int
-counterT = do ts <- stState
+counterT = do ts <- stStateT
               return (tsCounter ts)
 
 countUpdateT :: Int -> TAMSt ()
-countUpdateT c = do ts <- stState
-                    stUpdate (ts{tsCounter = c})
+countUpdateT c = do ts <- stStateT
+                    stUpdateT (ts{tsCounter = c})
 
 continueT :: TAMSt ()
 continueT = do c <- counterT
                countUpdateT (c+1)
 
 pushT :: Int -> TAMSt ()
-pushT x = do ts <- stState
-             stUpdate (tsPush x ts)
+pushT x = do ts <- stStateT
+             stUpdateT (tsPush x ts)
              return ()
 
 popT :: TAMSt Int
-popT = do ts <- stState
+popT = do ts <- stStateT
           let (x, ts') = tsPop ts
-          stUpdate ts
+          stUpdateT ts'
           return x
 
-executeT :: TAMInst -> TAMSt ()
+jumpToLabel :: Int -> StateIO TAMState ()
+jumpToLabel l = do (TAMState tsCode _ _) <- stStateT
+                   countUpdateT (lookupLabel tsCode l)
+
+varLookup :: Int -> StateIO TAMState Int
+varLookup a = do (TAMState _ _ tsStack) <- stStateT
+                 return $ length tsStack - a - 1
+
+getVar :: Int -> StateIO TAMState Int
+getVar a = do (TAMState _ _ tsStack) <- stStateT
+              addr <- varLookup a
+              return $ tsStack !! addr
+
+setVar :: Int -> Int -> StateIO TAMState ()
+setVar a x = do ts <- stStateT
+                let (TAMState _ _ tsStack) = ts
+                let (as, _:bs) = splitAt a tsStack
+                stUpdateT $ ts { tsStack = as ++ [x] ++ bs }
+
+executeT :: TAMInst -> StateIO TAMState ()
 executeT (LOADL x) = do pushT x
                         continueT
 
@@ -107,42 +131,36 @@ executeT NEG = do x <- popT
                   pushT (- x)
                   continueT
 
-step :: Stack -> [TAMInst] -> Int -> IO (Stack, Int)
-step s prog pc = case prog !! pc of
-    LOADL x -> return (x : s, pc + 1)
+executeT HALT = countUpdateT (-1)
 
-    ADD -> let (x:y:s') = s in return (x + y : s', pc + 1)
-    SUB -> let (x:y:s') = s in return (y - x : s', pc + 1)
-    MUL -> let (x:y:s') = s in return (x * y : s', pc + 1)
-    DIV -> let (x:y:s') = s in return (y `div` x : s', pc + 1)
+executeT GETINT = do lift $ putStrLn "Enter a number: "
+                     x <- lift getLine
+                     pushT (read x)
+                     continueT
 
-    LSS -> let (y:x:s') = s in return ((if x < y then 1 else 0) : s', pc + 1)
-    GRT -> let (y:x:s') = s in return ((if x > y then 1 else 0) : s', pc + 1)
-    EQL -> let (x:y:s') = s in return ((if x == y then 1 else 0) : s', pc + 1)
+executeT PUTINT = do lift $ putStr "output > "
+                     x <- popT
+                     lift $ print x
+                     continueT
 
-    AND -> let (x:y:s') = s in return (boolAnd x y : s', pc + 1)
-    OR ->  let (x:y:s') = s in return (boolOr x y : s', pc + 1)
-    NOT -> let (x:s')   = s in return (boolNot x : s', pc + 1)
+executeT (LABEL l) = continueT
 
-    NEG -> let (x:s')   = s in return (-x : s', pc + 1)
+executeT (JUMP l) = jumpToLabel l
 
-    HALT -> return (s, -1)
+executeT (JUMPIFZ l) = do x <- popT
+                          if x == 0 then
+                            jumpToLabel l
+                          else
+                            continueT
 
-    GETINT -> do putStrLn "Enter a number: "
-                 x <- getLine
-                 return (read x : s, pc + 1)
+executeT (LOAD a) = do x <- getVar a
+                       pushT x
+                       continueT
 
-    PUTINT -> let (x:s') = s in putStr "output > " >> print x >> pure (s', pc + 1)
-    
-    LABEL l -> return (s, pc + 1)
-
-    JUMP l -> return (s, lookupLabel prog l)
-    JUMPIFZ l -> let (x:s') = s in return (s', if x == 0 then lookupLabel prog l else pc + 1)
-
-    LOAD a -> return ((s !! (varLookup s a)) : s, pc + 1)
-
-    STORE a -> let (x:s') = s in
-                   return (setVar s' (varLookup s' a) x, pc + 1)
+executeT (STORE a) = do x <- popT
+                        addr <- varLookup a
+                        setVar addr x
+                        continueT
 
 lookupLabel :: [TAMInst] -> Int -> Int
 lookupLabel prog l = fromJust $ findIndex (\x -> case x of
@@ -165,29 +183,38 @@ boolNot x = case x of
     0 -> 1
     1 -> 0
 
-varLookup :: Stack -> Int -> Int
-varLookup s a = length s - a - 1
-
-setVar :: Stack -> Int -> Int -> Stack
-setVar s a x = let (as, _:bs) = splitAt a s in
-                   as ++ [x] ++ bs
-
 -- execTAM :: Stack -> [TAMInst] -> IO Stack
 -- execTAM s is = foldM execute s is
 
-execTAM :: Stack -> Int -> [TAMInst] -> IO (Stack, Int)
-execTAM s pc prog = do (s', pc') <- step s prog pc
-                       if pc' == -1 then
-                           return (s', -1)
-                       else
-                           execTAM s' pc' prog
+execTAM :: StateIO TAMState ()
+execTAM = do inst <- instructionT
+             executeT inst
+             pc <- counterT
+             ts <- stStateT
+             if pc == -1 then
+                return ()
+             else
+                execTAM
 
--- traceTAM
+initialState :: [TAMInst] -> TAMState
+initialState prog = TAMState {tsCode = prog, tsCounter = 0, tsStack = []}
 
-traceTAM :: Stack -> Int -> [TAMInst] -> IO (Stack, Int)
-traceTAM s pc prog = do (s', pc') <- step s prog pc
-                        putStrLn (show (prog !! pc) ++ "\t\t" ++ show s')
-                        if pc' == -1 then
-                           return (s', -1)
-                        else
-                           traceTAM s' pc' prog
+runTAM :: [TAMInst] -> IO Stack
+runTAM prog = do (_, (TAMState _ _ tsStack)) <- appT execTAM (initialState prog)
+                 return tsStack
+
+traceTAM' :: StateIO TAMState ()
+traceTAM' = do inst <- instructionT
+               executeT inst
+               (TAMState prog pc s') <- stStateT
+               pc <- counterT
+               ts <- stStateT
+               if pc == -1 then
+                  return ()
+               else do
+                  lift $ putStrLn (show (prog !! pc) ++ "\t\t" ++ show s')
+                  traceTAM'
+
+traceTAM :: [TAMInst] -> IO Stack
+traceTAM prog = do (_, (TAMState _ _ tsStack)) <- appT traceTAM' (initialState prog)
+                   return tsStack
