@@ -98,13 +98,13 @@ executeT DIV = do x <- popT
                   pushT (y `div` x)
                   continueT
 
-executeT LSS = do x <- popT
-                  y <- popT
+executeT LSS = do y <- popT
+                  x <- popT
                   pushT (if x < y then 1 else 0)
                   continueT
 
-executeT GRT = do x <- popT
-                  y <- popT
+executeT GRT = do y <- popT
+                  x <- popT
                   pushT (if x > y then 1 else 0)
                   continueT
 
