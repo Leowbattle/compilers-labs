@@ -1,5 +1,6 @@
 import Parser
 import MTParser
+import TAMParser
 import TAMVirtualMachine
 import CodeGenerator
 
@@ -25,12 +26,12 @@ runCompiler srcFile = do
     src <- readFile srcFile
     let code = compileMT src
     let outPath = (removeExtension srcFile) ++ ".tam"
-    writeFile outPath (show code)
+    writeFile outPath (showTAM code)
 
 runInterpreter :: String -> Bool -> IO ()
 runInterpreter srcFile trace = do
     src <- readFile srcFile
-    let code = read src :: [TAMInst]
+    let code = parseTAM src
     result <- if trace then
         traceTAM code
     else

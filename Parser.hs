@@ -1,6 +1,6 @@
 module Parser where
 
-import Control.Applicative (Alternative, empty, (<|>))
+import Control.Applicative (Alternative, empty, many, (<|>))
 import Data.Char
 
 newtype Parser a = P (String -> [(a,String)])
@@ -69,6 +69,12 @@ string [] = return []
 string (x:xs) = do char x
                    string xs
                    return (x:xs)
+
+caseless :: String -> Parser String
+caseless [] = return []
+caseless (x:xs) = do (char (toLower x) )<|> (char (toUpper x))
+                     caseless xs
+                     return (x:xs)
 
 token :: Parser a -> Parser a
 token p = do

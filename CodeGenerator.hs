@@ -2,10 +2,12 @@ module CodeGenerator where
 
 import Parser
 import MTParser
-import Data.List (find)
+import Data.List (find, intercalate)
 import State
 
 type Stack = [Int]
+
+type Label = String
 
 data TAMInst
     = LOADL Int -- push Integer into the stack
@@ -27,13 +29,16 @@ data TAMInst
     | GETINT
     | PUTINT
 
-    | LABEL Int
-    | JUMP Int
-    | JUMPIFZ Int
+    | LABEL Label
+    | JUMP Label
+    | JUMPIFZ Label
 
     | LOAD Int
     | STORE Int
     deriving (Show, Read)
+
+showTAM :: [TAMInst] -> String
+showTAM prog = intercalate "\n" (map show prog)
 
 type VarEnv = [(String, Int)]
 
@@ -95,10 +100,10 @@ expCode v (Conditional cond yes no) = do condcode <- expCode v cond
 
 -- compExpr v s = let ((e, _):_) = parse expr s in expCode v e
 
-getLabel :: ST Int Int
+getLabel :: ST Int Label
 getLabel = do n <- stState
               stUpdate (n + 1)
-              return n
+              return $ "#" ++ show n
 
 compCmd :: VarEnv -> Command -> ST Int [TAMInst]
 

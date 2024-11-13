@@ -55,7 +55,7 @@ popT = do ts <- stStateT
           stUpdateT ts'
           return x
 
-jumpToLabel :: Int -> StateIO TAMState ()
+jumpToLabel :: Label -> StateIO TAMState ()
 jumpToLabel l = do (TAMState tsCode _ _) <- stStateT
                    countUpdateT (lookupLabel tsCode l)
 
@@ -162,7 +162,7 @@ executeT (STORE a) = do x <- popT
                         setVar addr x
                         continueT
 
-lookupLabel :: [TAMInst] -> Int -> Int
+lookupLabel :: [TAMInst] -> Label -> Int
 lookupLabel prog l = fromJust $ findIndex (\x -> case x of
     LABEL l' -> l == l'
     _ -> False) prog
