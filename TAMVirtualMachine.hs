@@ -181,7 +181,7 @@ boolOr x y = case (x, y) of
 boolNot :: Int -> Int
 boolNot x = case x of
     0 -> 1
-    1 -> 0
+    _ -> 0
 
 -- execTAM :: Stack -> [TAMInst] -> IO Stack
 -- execTAM s is = foldM execute s is

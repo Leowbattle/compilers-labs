@@ -42,22 +42,28 @@ operator ops p = do x <- p
                     return (foldl (\a (op, m) -> BinOp op a m) x xs)
 
 expr :: Parser Expr
-expr = condExp <|> logicExp
+expr = condExp <|> orExp
 
 condExp :: Parser Expr
-condExp = do cond <- logicExp
+condExp = do cond <- orExp
              token $ string "?"
-             x <- logicExp
+             x <- orExp
              token $ string ":"
              y <- expr
              return (Conditional cond x y)
 
-logicExp :: Parser Expr
-logicExp = do token $ string "!"
-              e <- expr
+orExp :: Parser Expr
+orExp = operator [("||", BinOr)] andExp
+
+andExp :: Parser Expr
+andExp = operator [("&&", BinAnd)] notExp
+
+notExp :: Parser Expr
+notExp =   do token $ string "!"
+              e <- term
               return (UnOp UnNot e)
            <|>
-           operator [("&&", BinAnd), ("||", BinOr)] compExp
+           compExp
 
 compExp :: Parser Expr
 compExp = operator [("<", Less),
