@@ -7,8 +7,12 @@ import Data.Char
 data Program = LetIn [Declaration] Command
                deriving Show
 
+data Type = Integer | Boolean deriving Show
+
 type Identifier = String
-data Declaration = VarDecl Identifier | VarInit Identifier Expr
+data Declaration = VarDecl Identifier |
+                   VarInit Identifier Expr |
+                   FunctionDecl Identifier [(Identifier, Type)] Type Expr
                    deriving Show
 
 data Command = Assignment Identifier Expr
@@ -24,6 +28,7 @@ data Expr = Identifier Identifier
     | BinOp BinOperator Expr Expr
     | UnOp UnOperator Expr
     | Conditional Expr Expr Expr
+    | FunctionCall Identifier [Expr]
     deriving Show
 data BinOperator = Addition | Subtraction | Multiplication | Division | BinAnd | BinOr |
                    Less | LessEq | Greater | GreaterEq | Equals | NotEquals
@@ -79,8 +84,22 @@ addExp = operator [("+", Addition), ("-", Subtraction)] mexp
 mexp :: Parser Expr
 mexp = operator [("*", Multiplication), ("/", Division)] term
 
+exprs :: Parser [Expr]
+exprs = do e <- expr
+           token $ string ","
+           es <- exprs
+           return (e:es)
+         <|>
+         (:[]) <$> expr
+
 term :: Parser Expr
-term = token $ int <|>
+term = token $ do id <- identifier
+                  token $ string "("
+                  args <- exprs
+                  token $ string ")"
+                  return $ FunctionCall id args
+               <|>
+               int <|>
                Identifier <$> identifier <|>
 
                do token $ string "-"
