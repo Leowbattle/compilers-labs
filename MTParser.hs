@@ -25,6 +25,7 @@ data Command = Assignment Identifier Expr
 
 data Expr = Identifier Identifier
     | LitInteger Integer
+    | LitBool Bool
     | BinOp BinOperator Expr Expr
     | UnOp UnOperator Expr
     | Conditional Expr Expr Expr
@@ -109,7 +110,13 @@ parenList open p close = do token $ string open
                             return xs
 
 term :: Parser Expr
-term = token $ do id <- identifier
+term = token $ do token $ string "false"
+                  return $ LitBool False
+               <|>
+               do token $ string "true"
+                  return $ LitBool True
+               <|>
+               do id <- identifier
                   args <- parenList "(" expr ")"
                   return $ FunctionCall id args
                <|>
