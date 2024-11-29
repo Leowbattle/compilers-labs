@@ -1,4 +1,5 @@
 let
+	fun x (n: Integer) : Integer = n;
 	var x : Integer := 7;
 	var y : Integer := 3;
 	var x : Integer;

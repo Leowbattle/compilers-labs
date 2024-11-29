@@ -4,8 +4,80 @@ import MTParser
 import Parser
 import State
 
-type VarContext = [(String, Type)]
+type VarContext = [(String, VFType)]
 type Error = String
+
+pExpr :: String -> Expr
+pExpr s = let ((e,_):_) = parse expr s in e
+
+typeCheckBinOp :: VarContext -> Expr -> Expr -> Type -> Type -> Maybe VFType
+typeCheckBinOp vars x y targ tret = do tx <- typeCheckExpr vars x
+                                       ty <- typeCheckExpr vars y
+                                       if tx == ty && tx == VarType targ then
+                                          return $ VarType tret
+                                       else
+                                          Nothing
+
+typeCheckExpr :: VarContext -> Expr -> Maybe VFType
+typeCheckExpr vars (Identifier id) = lookup id vars
+typeCheckExpr vars (LitInteger _) = Just $ VarType TyInt
+typeCheckExpr vars (LitBool _) = Just $ VarType TyBool
+
+typeCheckExpr vars (BinOp Addition x y) = typeCheckBinOp vars x y TyInt TyInt
+typeCheckExpr vars (BinOp Subtraction x y) = typeCheckBinOp vars x y TyInt TyInt
+typeCheckExpr vars (BinOp Multiplication x y) = typeCheckBinOp vars x y TyInt TyInt
+typeCheckExpr vars (BinOp Division x y) = typeCheckBinOp vars x y TyInt TyInt
+
+typeCheckExpr vars (BinOp BinAnd x y) = typeCheckBinOp vars x y TyBool TyBool
+typeCheckExpr vars (BinOp BinOr x y) = typeCheckBinOp vars x y TyBool TyBool
+
+typeCheckExpr vars (BinOp Less x y) = typeCheckBinOp vars x y TyInt TyBool
+typeCheckExpr vars (BinOp LessEq x y) = typeCheckBinOp vars x y TyInt TyBool
+typeCheckExpr vars (BinOp Greater x y) = typeCheckBinOp vars x y TyInt TyBool
+typeCheckExpr vars (BinOp GreaterEq x y) = typeCheckBinOp vars x y TyInt TyBool
+
+typeCheckExpr vars (BinOp Equals x y) = do tx <- typeCheckExpr vars x
+                                           ty <- typeCheckExpr vars y
+                                           if tx == ty then
+                                              return $ VarType TyBool
+                                           else
+                                              Nothing
+
+-- Could reduce code duplication here?
+typeCheckExpr vars (BinOp NotEquals x y) = do tx <- typeCheckExpr vars x
+                                              ty <- typeCheckExpr vars y
+                                              if tx == ty then
+                                                 return $ VarType TyBool
+                                              else
+                                                 Nothing
+
+typeCheckExpr vars (UnOp Negation x) = do tx <- typeCheckExpr vars x
+                                          if tx == VarType TyInt then
+                                             return $ VarType TyInt
+                                          else
+                                             Nothing
+
+typeCheckExpr vars (UnOp UnNot x) = do tx <- typeCheckExpr vars x
+                                       if tx == VarType TyBool then
+                                          return $ VarType TyBool
+                                       else
+                                          Nothing
+
+typeCheckExpr vars (Conditional cond x y) = do tcond <- typeCheckExpr vars cond
+                                               tx <- typeCheckExpr vars x
+                                               ty <- typeCheckExpr vars y
+                                               if tcond == VarType TyBool && tx == ty then
+                                                  return tx
+                                               else
+                                                  Nothing
+
+typeCheckExpr vars (FunctionCall id args) = do targs <- mapM (typeCheckExpr vars) args
+                                               case lookup id vars of
+                                                   Just (FunType argtypes ret) -> if map VarType argtypes == targs then
+                                                                                     return $ VarType ret
+                                                                                  else
+                                                                                     Nothing
+                                                   _ -> Nothing
 
 checkDecls :: [Declaration] -> ST VarContext Error
 checkDecls [] = pure []

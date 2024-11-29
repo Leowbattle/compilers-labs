@@ -7,7 +7,7 @@ import Data.Char
 data Program = LetIn [Declaration] Command
                deriving Show
 
-data Type = TyInt | TyBool deriving Show
+data Type = TyInt | TyBool deriving (Show, Eq)
 
 type Identifier = String
 data Declaration = VarDecl Identifier Type |
@@ -20,10 +20,12 @@ declName (VarDecl id _) = id
 declName (VarInit id _ _) = id
 declName (FunctionDecl id _ _ _) = id
 
-declType :: Declaration -> Type
-declType (VarDecl _ ty) = ty
-declType (VarInit _ ty _) = ty
-declType (FunctionDecl _ _ _ _) = undefined
+data VFType = VarType Type | FunType [Type] Type deriving (Show, Eq)
+
+declType :: Declaration -> VFType
+declType (VarDecl _ ty) = VarType ty
+declType (VarInit _ ty _) = VarType ty
+declType (FunctionDecl _ args ret _) = FunType (map snd args) ret
 
 data Command = Assignment Identifier Expr
              | IfThenElse Expr Command Command
