@@ -143,12 +143,12 @@ compCmd v (BeginEnd (c:cs)) = do  ccode <- compCmd v c
 
 compileVars :: [TAMInst] -> [Declaration] -> VarEnv -> ST Int (VarEnv, [TAMInst])
 compileVars inst [] v = return (v, inst)
-compileVars inst ((VarDecl id):ds) v = do let v' = (id, length v):v
+compileVars inst ((VarDecl id ty):ds) v = do let v' = (id, length v):v
                                           -- ecode <- expCode v e
-                                          compileVars (inst ++ [LOADL 0]) ds v'
-compileVars inst ((VarInit id e):ds) v = do let v' = (id, length v):v
-                                            ecode <- expCode v e
-                                            compileVars (inst ++ ecode) ds v'
+                                             compileVars (inst ++ [LOADL 0]) ds v'
+compileVars inst ((VarInit id ty e):ds) v = do let v' = (id, length v):v
+                                               ecode <- expCode v e
+                                               compileVars (inst ++ ecode) ds v'
 
 compileProgram :: Program -> ST Int [TAMInst]
 compileProgram (LetIn decls cmd) = do (v, initCode) <- compileVars [] decls []
