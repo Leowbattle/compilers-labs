@@ -7,13 +7,23 @@ import Data.Char
 data Program = LetIn [Declaration] Command
                deriving Show
 
-data Type = Integer | Boolean deriving Show
+data Type = TyInt | TyBool deriving Show
 
 type Identifier = String
 data Declaration = VarDecl Identifier Type |
                    VarInit Identifier Type Expr |
                    FunctionDecl Identifier [(Identifier, Type)] Type Expr
                    deriving Show
+
+declName :: Declaration -> String
+declName (VarDecl id _) = id
+declName (VarInit id _ _) = id
+declName (FunctionDecl id _ _ _) = id
+
+declType :: Declaration -> Type
+declType (VarDecl _ ty) = ty
+declType (VarInit _ ty _) = ty
+declType (FunctionDecl _ _ _ _) = undefined
 
 data Command = Assignment Identifier Expr
              | IfThenElse Expr Command Command
@@ -143,7 +153,7 @@ program = do token $ string "let"
              return (LetIn ds c)
 
 typeP :: Parser Type
-typeP = (string "Integer" >> return Integer) <|> (string "Boolean" >> return Boolean)
+typeP = (string "Integer" >> return TyInt) <|> (string "Boolean" >> return TyBool)
 
 declarations :: Parser [Declaration]
 declarations = do d <- declaration
