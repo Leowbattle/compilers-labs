@@ -90,7 +90,8 @@ exprs = do e <- expr
            es <- exprs
            return (e:es)
          <|>
-         (:[]) <$> expr
+         (:[]) <$> expr <|>
+         return []
 
 term :: Parser Expr
 term = token $ do id <- identifier
