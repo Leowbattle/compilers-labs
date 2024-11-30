@@ -3,6 +3,7 @@ import MTParser
 import TAMParser
 import TAMVirtualMachine
 import CodeGenerator
+import TypeChecker
 
 import System.Environment ( getArgs )
 
@@ -24,8 +25,10 @@ main = do
 runCompiler :: String -> IO ()
 runCompiler srcFile = do
     src <- readFile srcFile
-    let code = compileMT src
+    let (code, error) = compileMT src
     let outPath = (removeExtension srcFile) ++ ".tam"
+    putStr (if error == "" then "" else error ++ "\n")
+    putStrLn $ "compiled to TAM file: " ++ outPath
     writeFile outPath (showTAM code)
 
 runInterpreter :: String -> Bool -> IO ()

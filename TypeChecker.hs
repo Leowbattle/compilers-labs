@@ -3,6 +3,7 @@ module TypeChecker where
 import MTParser
 import Parser
 import State
+import Control.Applicative
 
 type VarContext = [(String, VFType)]
 type Error = String
@@ -79,21 +80,72 @@ typeCheckExpr vars (FunctionCall id args) = do targs <- mapM (typeCheckExpr vars
                                                                                      Nothing
                                                    _ -> Nothing
 
+checkDuplicateDecl :: VarContext -> Declaration -> Error
+checkDuplicateDecl vars d = let name = declName d
+                                exists = declName d `elem` map fst vars
+                                in if exists then
+                                 "Variable " ++ name ++ ": Identifier " ++ name ++ " declared more than once\n"
+                                else
+                                 ""
+
+checkVarInit :: VarContext -> Declaration -> Error
+checkVarInit vars (VarInit id ty expr) = case typeCheckExpr vars expr of
+   Nothing -> "Variable " ++ id ++ ": Expression doesn't type check\n"
+   Just texpr -> if texpr == VarType ty then "" else "Variable " ++ id ++ ": Type of expression is different from type of variable\n"
+
+checkVarInit _ _ = ""
+
+checkFunction :: VarContext -> Declaration -> Error
+checkFunction vars (FunctionDecl id args ret expr) = case typeCheckExpr vars expr of
+   Nothing -> "Function " ++ id ++ ": Expression doesn't type check\n"
+   Just texpr -> if texpr == VarType ret then "" else "Function " ++ id ++ ": Type of expression is different from return type of function\n"
+checkFunction _ _ = ""
+
 checkDecls :: [Declaration] -> ST VarContext Error
 checkDecls [] = pure []
 checkDecls (d:ds) = do vars <- stState
                        let name = declName d
-                           exists = declName d `elem` map fst vars
-                           err = if exists then
-                            "Variable " ++ name ++ ": Identifier " ++ name ++ " declared more than once\n"
-                           else
-                            ""
+                           err = checkDuplicateDecl vars d ++
+                                 checkVarInit vars d ++
+                                 checkFunction vars d
                        stUpdate ((name, declType d):vars)
                        errs <- checkDecls ds
                        return (err ++ errs)
 
+checkCmd :: VarContext -> Command -> Error
+checkCmd vars (Assignment id expr) = case lookup id vars of
+   Nothing -> "Assignment: Variable " ++ id ++ " does not exist\n"
+   Just ty -> case typeCheckExpr vars expr of
+      Nothing -> "Assignment: Variable " ++ id ++ " expression does not type check\n"
+      Just texpr -> if texpr == ty then "" else "Assignment: Variable " ++ id ++ " expression has wrong type\n"
+
+checkCmd vars (IfThenElse cond a b) = case typeCheckExpr vars cond of
+   Nothing -> "If command: test expression does not type check\n"
+   Just (VarType TyInt) -> "If command: test expression is not a boolean\n"
+   Just (VarType TyBool) -> checkCmd vars a ++ checkCmd vars b
+
+checkCmd vars (While cond cmd) = case typeCheckExpr vars cond of
+   Nothing -> "While command: test expression does not type check\n"
+   Just (VarType TyInt) -> "While command: test expression is not a boolean\n"
+   Just (VarType TyBool) -> checkCmd vars cmd
+
+checkCmd vars (GetInt id) = case lookup id vars of
+   Nothing -> "GetInt command: Variable " ++ id ++ " not found\n"
+   Just (VarType TyBool) -> "GetInt command: Variable " ++ id ++ " not Integer\n"
+   Just (VarType TyInt) -> ""
+
+checkCmd vars (PrintInt expr) = case typeCheckExpr vars expr of
+   Nothing -> "PrintInt command: Expression does not type check\n"
+   Just (VarType TyBool) -> "PrintInt command: Expression must have type Integer\n"
+   Just (VarType TyInt) -> ""
+
+checkCmd vars (BeginEnd cmds) = concatMap (checkCmd vars) cmds
+
 checkProgram :: Program -> ST VarContext Error
-checkProgram = undefined
+checkProgram (LetIn ds cmd) = do ed <- checkDecls ds
+                                 vars <- stState
+                                 let ec = checkCmd vars cmd
+                                       in return (ed ++ ec)
 
 getDecls :: String -> [Declaration]
 getDecls s = let (LetIn ds _) = parseMT s in ds

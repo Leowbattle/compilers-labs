@@ -1,9 +1,9 @@
 let
-	fun x (n: Integer) : Integer = n;
-	var x : Integer := 7;
-	var y : Integer := 3;
-	var x : Integer;
-	var x : Integer;
-	var y : Integer
+	var x : Integer := 4;
+	fun func (a: Integer, b: Boolean) : Integer = x;
+	var y : Boolean := true
 in
-printint(square(x) + square(square (y)))
+begin
+	x := 1;
+	y := func(1, false) == 2
+end

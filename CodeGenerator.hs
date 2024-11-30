@@ -2,8 +2,9 @@ module CodeGenerator where
 
 import Parser
 import MTParser
-import Data.List (find, intercalate)
 import State
+import TypeChecker
+import Data.List (find, intercalate)
 
 type Stack = [Int]
 
@@ -155,5 +156,11 @@ compileProgram (LetIn decls cmd) = do (v, initCode) <- compileVars [] decls []
                                       cmdCode <- compCmd v cmd
                                       return $ initCode ++ cmdCode ++ [HALT]
 
-compileMT :: String -> [TAMInst]
-compileMT s = fst $ app (compileProgram $ parseMT s) 0
+-- compileMT :: String -> [TAMInst]
+-- compileMT s = fst $ app (compileProgram $ parseMT s) 0
+
+compileMT :: String -> ([TAMInst], Error)
+compileMT s = let ast = parseMT s
+                  inst = fst $ app (compileProgram ast) 0
+                  err = fst $ app (checkProgram ast) []
+                  in (inst, err)
