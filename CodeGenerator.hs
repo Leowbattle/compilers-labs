@@ -145,7 +145,7 @@ expCode v (Conditional cond yes no) = do condcode <- expCode v cond
                                                  nocode ++
                                                  [LABEL l2])
 
-expCode v (FunctionCall id args) = do argscode <- concat <$> mapM (expCode v) (reverse args)
+expCode v (FunctionCall id args) = do argscode <- concat <$> mapM (expCode v) args
                                       return $ argscode ++ [CALL id]
 
 -- expCode v x = error $ show x
@@ -211,7 +211,7 @@ compileVars inst ((VarInit id ty e):ds) v = do let v' = (id, (StackBase, length 
 compileVars inst ((FunctionDecl id args ret e):ds) v = compileVars inst ds v
 
 compileFunction :: VarEnv -> Declaration -> ST Int [TAMInst]
-compileFunction v (FunctionDecl id args ret e) = do let v' = zipWith (\(arg, _) i -> (arg, (LocalBase, i))) args [1..] ++ v
+compileFunction v (FunctionDecl id args ret e) = do let v' = zipWith (\(arg, _) i -> (arg, (LocalBase, i))) (reverse args) [1..] ++ v
                                                     ecode <- expCode v' e
                                                     return $ [LABEL id] ++ ecode ++ [RETURN 1 (length args)]
 compileFunction v _ = return []
