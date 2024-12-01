@@ -9,13 +9,15 @@ import Data.List
 data TAMState = TAMState {
     tsCode :: [TAMInst],
     tsCounter :: Int,
-    tsStack :: Stack
+    tsStack :: Stack,
+    tsSB :: Int,
+    tsLB :: Int
 }
 
 type TAMSt a = StateIO TAMState a
 
 tsPush :: Int -> TAMState -> TAMState
-tsPush x ts = ts {tsStack = x : (tsStack ts)}
+tsPush x ts = ts {tsStack = x : tsStack ts}
 
 tsPop :: TAMState -> (Int,TAMState)
 tsPop ts = let (x:xs) = tsStack ts
@@ -25,10 +27,10 @@ tsSetCounter :: Int -> TAMState -> TAMState
 tsSetCounter i ts = ts {tsCounter = i}
 
 tsInstruction :: TAMState -> TAMInst
-tsInstruction ts = (tsCode ts)!!(tsCounter ts)
+tsInstruction ts = tsCode ts !! tsCounter ts
 
 instructionT :: TAMSt TAMInst
-instructionT = do (TAMState tsCode _ _) <- stStateT
+instructionT = do (TAMState tsCode _ _ _ _) <- stStateT
                   pc <- counterT
                   return $ tsCode !! pc
 
@@ -56,23 +58,23 @@ popT = do ts <- stStateT
           return x
 
 jumpToLabel :: Label -> StateIO TAMState ()
-jumpToLabel l = do (TAMState tsCode _ _) <- stStateT
+jumpToLabel l = do (TAMState tsCode _ _ _ _) <- stStateT
                    countUpdateT (lookupLabel tsCode l)
 
 varLookup :: Int -> StateIO TAMState Int
-varLookup a = do (TAMState _ _ tsStack) <- stStateT
+varLookup a = do (TAMState _ _ tsStack _ _) <- stStateT
                  return $ length tsStack - a - 1
 
-getVar :: Int -> StateIO TAMState Int
-getVar a = do (TAMState _ _ tsStack) <- stStateT
-              addr <- varLookup a
-              return $ tsStack !! addr
+-- getVar :: Int -> StateIO TAMState Int
+-- getVar a = do (TAMState _ _ tsStack) <- stStateT
+--               addr <- varLookup a
+--               return $ tsStack !! addr
 
-setVar :: Int -> Int -> StateIO TAMState ()
-setVar a x = do ts <- stStateT
-                let (TAMState _ _ tsStack) = ts
-                let (as, _:bs) = splitAt a tsStack
-                stUpdateT $ ts { tsStack = as ++ [x] ++ bs }
+-- setVar :: Int -> Int -> StateIO TAMState ()
+-- setVar a x = do ts <- stStateT
+--                 let (TAMState _ _ tsStack) = ts
+--                 let (as, _:bs) = splitAt a tsStack
+--                 stUpdateT $ ts { tsStack = as ++ [x] ++ bs }
 
 executeT :: TAMInst -> StateIO TAMState ()
 executeT (LOADL x) = do pushT x
@@ -153,14 +155,16 @@ executeT (JUMPIFZ l) = do x <- popT
                           else
                             continueT
 
-executeT (LOAD a) = do x <- getVar a
-                       pushT x
-                       continueT
+executeT (LOAD mode op a) = error "LOAD not implemented"
+-- executeT (LOAD mode op a) = do let x = 0
+--                                pushT x
+--                                continueT
 
-executeT (STORE a) = do x <- popT
-                        addr <- varLookup a
-                        setVar addr x
-                        continueT
+executeT (STORE mode op a) = error "STORE not implemented"
+-- executeT (STORE mode op a) = do x <- popT
+--                                 addr <- varLookup a
+--                                 setVar addr x
+--                                 continueT
 
 lookupLabel :: [TAMInst] -> Label -> Int
 lookupLabel prog l = fromJust $ findIndex (\x -> case x of
@@ -197,16 +201,16 @@ execTAM = do inst <- instructionT
                 execTAM
 
 initialState :: [TAMInst] -> TAMState
-initialState prog = TAMState {tsCode = prog, tsCounter = 0, tsStack = []}
+initialState prog = TAMState {tsCode = prog, tsCounter = 0, tsStack = [], tsSB = 0, tsLB = 0}
 
 runTAM :: [TAMInst] -> IO Stack
-runTAM prog = do (_, (TAMState _ _ tsStack)) <- appT execTAM (initialState prog)
+runTAM prog = do (_, TAMState _ _ tsStack _ _) <- appT execTAM (initialState prog)
                  return tsStack
 
 traceTAM' :: StateIO TAMState ()
 traceTAM' = do inst <- instructionT
                executeT inst
-               (TAMState prog pc s') <- stStateT
+               (TAMState prog pc s' _ _) <- stStateT
                pc <- counterT
                ts <- stStateT
                if pc == -1 then
@@ -216,5 +220,5 @@ traceTAM' = do inst <- instructionT
                   traceTAM'
 
 traceTAM :: [TAMInst] -> IO Stack
-traceTAM prog = do (_, (TAMState _ _ tsStack)) <- appT traceTAM' (initialState prog)
+traceTAM prog = do (_, TAMState _ _ tsStack _ _) <- appT traceTAM' (initialState prog)
                    return tsStack

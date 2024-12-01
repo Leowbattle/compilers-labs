@@ -1,9 +1,8 @@
 let
-	var x : Integer := 4;
-	fun func (a: Integer) : Integer = func(1);
-	var y : Boolean := true
+	var x: Integer;
+	fun func (a: Integer, b: Integer) : Integer = a + b
 in
 begin
-	x := 1;
-	y := false
+	x := func(1+1, 3);
+	printint(x)
 end

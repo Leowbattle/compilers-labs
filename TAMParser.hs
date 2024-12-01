@@ -36,8 +36,29 @@ instTAM = arg1 "LOADL" LOADL natural <|>
           arg1 "LABEL" LABEL label <|>
           arg1 "JUMPIFZ" JUMPIFZ label <|>
           arg1 "JUMP" JUMP label <|>
-          arg1 "LOAD" LOAD natural <|>
-          arg1 "STORE" STORE natural
+          
+          do token $ string "LOAD"
+             token $ string "["
+             modeS <- token (string "SB" <|> string "LB")
+             opS <- token (string "+" <|> string "-")
+             offset <- token natural
+             token $ string "]"
+             let mode = case modeS of "SB" -> StackBase; "LB" -> LocalBase
+                 op = case opS of "+" -> Plus; "-" -> Minus
+             return $ LOAD mode op offset
+          <|>
+          do token $ string "STORE"
+             token $ string "["
+             modeS <- token (string "SB" <|> string "LB")
+             opS <- token (string "+" <|> string "-")
+             offset <- token natural
+             token $ string "]"
+             let mode = case modeS of "SB" -> StackBase; "LB" -> LocalBase
+                 op = case opS of "+" -> Plus; "-" -> Minus
+             return $ STORE mode op offset
+
+        --   arg1 "LOAD" LOAD natural <|>
+        --   arg1 "STORE" STORE natural
 
 insts :: Parser [TAMInst]
 insts = many instTAM

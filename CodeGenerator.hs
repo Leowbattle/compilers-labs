@@ -13,6 +13,18 @@ type Stack = [Int]
 
 type Label = String
 
+data StackMode = StackBase | LocalBase
+
+instance Show StackMode where
+  show StackBase = "SB"
+  show LocalBase = "LB"
+
+data AddressOperation = Plus | Minus
+
+instance Show AddressOperation where
+  show Plus = "+"
+  show Minus = "-"
+
 data TAMInst
     = LOADL Int -- push Integer into the stack
     | ADD -- adds two top values in the stack
@@ -36,26 +48,53 @@ data TAMInst
     | LABEL Label
     | JUMP Label
     | JUMPIFZ Label
+    | CALL Label
+    | RETURN Int Int
 
-    | LOAD Int
-    | STORE Int
-    deriving (Show, Read)
+    | LOAD StackMode AddressOperation Int
+    | STORE StackMode AddressOperation Int
+--     deriving (Show, Read)
+
+instance Show TAMInst where
+  show (LOADL x) = "LOADL " ++ show x
+  show ADD = "ADD"
+  show SUB = "SUB"
+  show MUL = "MUL"
+  show DIV = "DIV"
+  show NEG = "NEG"
+  show AND = "AND"
+  show OR = "OR"
+  show NOT = "NOT"
+  show LSS = "LSS"
+  show GRT = "GRT"
+  show EQL = "EQL"
+  show HALT = "HALT"
+  show GETINT = "GETINT"
+  show PUTINT = "PUTINT"
+  show (LABEL l) = "LABEL " ++ l
+  show (JUMP l) = "JUMP " ++ l
+  show (JUMPIFZ l) = "JUMPIFZ " ++ l
+  show (CALL l) = "CALL " ++ l
+  show (RETURN x y) = "RETURN " ++ show x ++ " " ++ show y
+  show (LOAD mode op a) = "LOAD [" ++ show mode ++ " " ++ show op ++ " " ++ show a ++ "]"
+  show (STORE mode op a) = "STORE [" ++ show mode ++ " " ++ show op ++ " " ++ show a ++ "]"
 
 showTAM :: [TAMInst] -> String
 showTAM prog = intercalate "\n" (map show prog)
 
-type VarEnv = [(String, Int)]
+type VarEnv = [(String, (StackMode, Int))]
 
 fromJust :: Maybe a -> a
-fromJust Nothing = error "Nothing"
+fromJust Nothing = error "fromJust Nothing"
 fromJust (Just x) = x
 
 fromBool :: Bool -> Int
 fromBool False = 0
 fromBool True = 1
 
-varAddr :: VarEnv -> String -> Int
-varAddr v x = trace (show v ++ "   " ++ show x) $ snd $ fromJust (find ((== x) . fst) v)
+varAddr :: VarEnv -> String -> (StackMode, Int)
+-- varAddr v x = trace (show v ++ "   " ++ show x) $ fromJust $ lookup x v
+varAddr v x = fromJust $ lookup x v
 
 binOpCode :: [TAMInst] -> VarEnv -> Expr -> Expr -> ST Int [TAMInst]
 binOpCode inst v x y = do xcode <- expCode v x
@@ -70,7 +109,9 @@ expCode :: VarEnv -> Expr -> ST Int [TAMInst]
 
 expCode v (LitInteger x) = return [LOADL (fromIntegral x)]
 expCode v (LitBool x) = return [LOADL (fromBool x)]
-expCode v (Identifier x) = return [LOAD $ varAddr v x]
+expCode v (Identifier x) = return $ case varAddr v x of
+        (StackBase, offset) -> [LOAD StackBase Plus offset]
+        (LocalBase, offset) -> [LOAD LocalBase Minus offset]
 
 expCode v (BinOp Addition x y) = binOpCode [ADD] v x y
 expCode v (BinOp Subtraction x y) = binOpCode [SUB] v x y
@@ -104,7 +145,8 @@ expCode v (Conditional cond yes no) = do condcode <- expCode v cond
                                                  nocode ++
                                                  [LABEL l2])
 
-expCode v (FunctionCall id args) = return []                                         
+expCode v (FunctionCall id args) = do argscode <- concat <$> mapM (expCode v) args
+                                      return $ argscode ++ [CALL id]
 
 -- expCode v x = error $ show x
 
@@ -118,7 +160,10 @@ getLabel = do n <- stState
 compCmd :: VarEnv -> Command -> ST Int [TAMInst]
 
 compCmd v (Assignment x expr) = do ecode <- expCode v expr
-                                   return $ ecode ++ [STORE $ varAddr v x]
+                                   let store = case varAddr v x of
+                                        (StackBase, offset) -> [STORE StackBase Plus offset]
+                                        (LocalBase, offset) -> [STORE LocalBase Minus offset]
+                                   return $ ecode ++ store
 
 compCmd v (IfThenElse expr yes no) = do  ecode <- expCode v expr
                                          yescode <- compCmd v yes
@@ -142,7 +187,10 @@ compCmd v (While expr cmd) = do  ecode <- expCode v expr
                                          cmdCode ++
                                          [JUMP l1, LABEL l2])
 
-compCmd v (GetInt x) = return [GETINT, STORE $ varAddr v x]
+-- compCmd v (GetInt x) = return [GETINT, STORE $ varAddr v x]
+compCmd v (GetInt x) = return $ case varAddr v x of
+        (StackBase, offset) -> [GETINT, STORE StackBase Plus offset]
+        (LocalBase, offset) -> [GETINT, STORE LocalBase Minus offset]
 compCmd v (PrintInt expr) = do ecode <- expCode v expr
                                return $ ecode ++ [PUTINT]
 
@@ -153,26 +201,32 @@ compCmd v (BeginEnd (c:cs)) = do  ccode <- compCmd v c
 
 compileVars :: [TAMInst] -> [Declaration] -> VarEnv -> ST Int (VarEnv, [TAMInst])
 compileVars inst [] v = return (v, inst)
-compileVars inst ((VarDecl id ty):ds) v = do let v' = (id, length v):v
+compileVars inst ((VarDecl id ty):ds) v = do let v' = (id, (StackBase, length v)):v
                                           -- ecode <- expCode v e
                                              compileVars (inst ++ [LOADL 0]) ds v'
-compileVars inst ((VarInit id ty e):ds) v = do let v' = (id, length v):v
+compileVars inst ((VarInit id ty e):ds) v = do let v' = (id, (StackBase, length v)):v
                                                ecode <- expCode v e
                                                compileVars (inst ++ ecode) ds v'
 
-compileVars inst ((FunctionDecl id args ret e):ds) v = return (v, inst)
+compileVars inst ((FunctionDecl id args ret e):ds) v = compileVars inst ds v
+
+compileFunction :: VarEnv -> Declaration -> ST Int [TAMInst]
+compileFunction v (FunctionDecl id args ret e) = do let v' = zipWith (\(arg, _) i -> (arg, (LocalBase, i))) args [1..] ++ v
+                                                    ecode <- expCode v' e
+                                                    return $ [LABEL id] ++ ecode ++ [RETURN 1 (length args)]
+compileFunction v _ = return []
 
 compileProgram :: Program -> ST Int [TAMInst]
 compileProgram (LetIn decls cmd) = do (v, initCode) <- compileVars [] decls []
-                                      trace ("xxx: " ++ show v) (return ())
                                       cmdCode <- compCmd v cmd
-                                      return $ initCode ++ cmdCode ++ [HALT]
+                                      funcCode <- concat <$> mapM (compileFunction v) decls
+                                      return $ initCode ++ cmdCode ++ [HALT] ++ funcCode
 
 -- compileMT :: String -> [TAMInst]
 -- compileMT s = fst $ app (compileProgram $ parseMT s) 0
 
 compileMT :: String -> ([TAMInst], Error)
 compileMT s = let ast = parseMT s
-                  inst = fst $ app (compileProgram ast) 0
                   err = fst $ app (checkProgram ast) []
+                  inst = if err == "" then fst $ app (compileProgram ast) 0 else []
                   in (inst, err)

@@ -96,7 +96,7 @@ checkVarInit vars (VarInit id ty expr) = case typeCheckExpr vars expr of
 checkVarInit _ _ = ""
 
 checkFunction :: VarContext -> Declaration -> Error
-checkFunction vars (FunctionDecl id args ret expr) = case typeCheckExpr vars expr of
+checkFunction vars (FunctionDecl id args ret expr) = case typeCheckExpr (map (\(name, t) -> (name, VarType t)) args ++ vars) expr of
    Nothing -> "Function " ++ id ++ ": Expression doesn't type check\n"
    Just texpr -> if texpr == VarType ret then "" else "Function " ++ id ++ ": Type of expression is different from return type of function\n"
 checkFunction _ _ = ""
@@ -128,7 +128,7 @@ checkCmd vars (Assignment id expr) = case lookup id vars of
 
 checkCmd vars (IfThenElse cond a b) = case typeCheckExpr vars cond of
    Nothing -> "If command: test expression does not type check\n"
-   Just (VarType TyInt) -> "If command: test expression is not a boolean\n"
+   Just (VarType TyInt) -> "If command: test expression is not a boolean\n" ++ checkCmd vars a ++ checkCmd vars b
    Just (VarType TyBool) -> checkCmd vars a ++ checkCmd vars b
 
 checkCmd vars (While cond cmd) = case typeCheckExpr vars cond of
