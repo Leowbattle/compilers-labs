@@ -145,7 +145,7 @@ expCode v (Conditional cond yes no) = do condcode <- expCode v cond
                                                  nocode ++
                                                  [LABEL l2])
 
-expCode v (FunctionCall id args) = do argscode <- concat <$> mapM (expCode v) args
+expCode v (FunctionCall id args) = do argscode <- concat <$> mapM (expCode v) (reverse args)
                                       return $ argscode ++ [CALL id]
 
 -- expCode v x = error $ show x

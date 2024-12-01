@@ -196,6 +196,7 @@ executeT (RETURN n m) = do (TAMState _ pc stack sb lb) <- stStateT
                            lb <- popT
                            replicateM_ m popT
                            mapM_ pushT retVal
+                           tsSetLBT lb
                            countUpdateT ra
 
 lookupLabel :: [TAMInst] -> Label -> Int
