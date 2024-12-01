@@ -3,7 +3,7 @@ module TAMVirtualMachine where
 import Parser
 import State
 import CodeGenerator
-import Control.Monad (foldM)
+import Control.Monad (foldM, replicateM, replicateM_)
 import Data.List
 
 data TAMState = TAMState {
@@ -25,6 +25,13 @@ tsPop ts = let (x:xs) = tsStack ts
 
 tsSetCounter :: Int -> TAMState -> TAMState
 tsSetCounter i ts = ts {tsCounter = i}
+
+tsSetLB :: Int -> TAMState -> TAMState
+tsSetLB lb ts = ts { tsLB = lb }
+
+tsSetLBT :: Int -> TAMSt ()
+tsSetLBT lb = do state <- stStateT
+                 stUpdateT (tsSetLB lb state)
 
 tsInstruction :: TAMState -> TAMInst
 tsInstruction ts = tsCode ts !! tsCounter ts
@@ -61,20 +68,22 @@ jumpToLabel :: Label -> StateIO TAMState ()
 jumpToLabel l = do (TAMState tsCode _ _ _ _) <- stStateT
                    countUpdateT (lookupLabel tsCode l)
 
-varLookup :: Int -> StateIO TAMState Int
-varLookup a = do (TAMState _ _ tsStack _ _) <- stStateT
-                 return $ length tsStack - a - 1
+varLookup :: StackMode -> AddressOperation -> Int -> StateIO TAMState Int
+varLookup mode op a = do (TAMState _ _ tsStack sb lb) <- stStateT
+                         let base = if mode == StackBase then sb else lb
+                             offset = if op == Plus then a else -a
+                         return $ length tsStack - (base + offset) - 1
 
--- getVar :: Int -> StateIO TAMState Int
--- getVar a = do (TAMState _ _ tsStack) <- stStateT
---               addr <- varLookup a
---               return $ tsStack !! addr
+getVar :: StackMode -> AddressOperation -> Int -> StateIO TAMState Int
+getVar mode op a = do (TAMState _ _ tsStack sb lb) <- stStateT
+                      addr <- varLookup mode op a
+                      return $ tsStack !! addr
 
--- setVar :: Int -> Int -> StateIO TAMState ()
--- setVar a x = do ts <- stStateT
---                 let (TAMState _ _ tsStack) = ts
---                 let (as, _:bs) = splitAt a tsStack
---                 stUpdateT $ ts { tsStack = as ++ [x] ++ bs }
+setVar :: Int -> Int -> StateIO TAMState ()
+setVar a x = do ts <- stStateT
+                let (TAMState _ _ tsStack _ _) = ts
+                let (as, _:bs) = splitAt a tsStack
+                stUpdateT $ ts { tsStack = as ++ [x] ++ bs }
 
 executeT :: TAMInst -> StateIO TAMState ()
 executeT (LOADL x) = do pushT x
@@ -155,16 +164,39 @@ executeT (JUMPIFZ l) = do x <- popT
                           else
                             continueT
 
-executeT (LOAD mode op a) = error "LOAD not implemented"
+-- executeT (LOAD mode op a) = error "LOAD not implemented"
 -- executeT (LOAD mode op a) = do let x = 0
 --                                pushT x
 --                                continueT
 
-executeT (STORE mode op a) = error "STORE not implemented"
+executeT (LOAD mode op a) = do x <- getVar mode op a
+                               pushT x
+                               continueT
+
+-- executeT (STORE mode op a) = error "STORE not implemented"
 -- executeT (STORE mode op a) = do x <- popT
 --                                 addr <- varLookup a
 --                                 setVar addr x
 --                                 continueT
+
+executeT (STORE mode op a) = do x <- popT
+                                addr <- varLookup mode op a
+                                setVar addr x
+                                continueT
+
+executeT (CALL l) = do (TAMState _ pc stack sb lb) <- stStateT
+                       pushT lb
+                       pushT (pc + 1)
+                       tsSetLBT (length stack)
+                       jumpToLabel l
+
+executeT (RETURN n m) = do (TAMState _ pc stack sb lb) <- stStateT
+                           retVal <- replicateM n popT
+                           ra <- popT
+                           lb <- popT
+                           replicateM_ m popT
+                           mapM_ pushT retVal
+                           countUpdateT ra
 
 lookupLabel :: [TAMInst] -> Label -> Int
 lookupLabel prog l = fromJust $ findIndex (\x -> case x of

@@ -36,6 +36,13 @@ instTAM = arg1 "LOADL" LOADL natural <|>
           arg1 "LABEL" LABEL label <|>
           arg1 "JUMPIFZ" JUMPIFZ label <|>
           arg1 "JUMP" JUMP label <|>
+          arg1 "CALL" CALL label <|>
+          
+          do token $ caseless "RETURN"
+             x <- token natural
+             y <- token natural
+             return $ RETURN x y
+          <|> 
           
           do token $ string "LOAD"
              token $ string "["

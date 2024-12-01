@@ -13,13 +13,13 @@ type Stack = [Int]
 
 type Label = String
 
-data StackMode = StackBase | LocalBase
+data StackMode = StackBase | LocalBase deriving Eq
 
 instance Show StackMode where
   show StackBase = "SB"
   show LocalBase = "LB"
 
-data AddressOperation = Plus | Minus
+data AddressOperation = Plus | Minus deriving Eq
 
 instance Show AddressOperation where
   show Plus = "+"
