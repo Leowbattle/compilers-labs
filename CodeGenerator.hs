@@ -6,6 +6,9 @@ import State
 import TypeChecker
 import Data.List (find, intercalate)
 
+-- TODO Remove
+import Debug.Trace
+
 type Stack = [Int]
 
 type Label = String
@@ -47,8 +50,12 @@ fromJust :: Maybe a -> a
 fromJust Nothing = error "Nothing"
 fromJust (Just x) = x
 
+fromBool :: Bool -> Int
+fromBool False = 0
+fromBool True = 1
+
 varAddr :: VarEnv -> String -> Int
-varAddr v x = snd $ fromJust (find ((== x) . fst) v)
+varAddr v x = trace (show v ++ "   " ++ show x) $ snd $ fromJust (find ((== x) . fst) v)
 
 binOpCode :: [TAMInst] -> VarEnv -> Expr -> Expr -> ST Int [TAMInst]
 binOpCode inst v x y = do xcode <- expCode v x
@@ -62,6 +69,7 @@ unOpCode inst v x = do xcode <- expCode v x
 expCode :: VarEnv -> Expr -> ST Int [TAMInst]
 
 expCode v (LitInteger x) = return [LOADL (fromIntegral x)]
+expCode v (LitBool x) = return [LOADL (fromBool x)]
 expCode v (Identifier x) = return [LOAD $ varAddr v x]
 
 expCode v (BinOp Addition x y) = binOpCode [ADD] v x y
@@ -95,7 +103,8 @@ expCode v (Conditional cond yes no) = do condcode <- expCode v cond
                                                  [JUMP l2, LABEL l1] ++
                                                  nocode ++
                                                  [LABEL l2])
-                                         
+
+expCode v (FunctionCall id args) = return []                                         
 
 -- expCode v x = error $ show x
 
@@ -151,8 +160,11 @@ compileVars inst ((VarInit id ty e):ds) v = do let v' = (id, length v):v
                                                ecode <- expCode v e
                                                compileVars (inst ++ ecode) ds v'
 
+compileVars inst ((FunctionDecl id args ret e):ds) v = return (v, inst)
+
 compileProgram :: Program -> ST Int [TAMInst]
 compileProgram (LetIn decls cmd) = do (v, initCode) <- compileVars [] decls []
+                                      trace ("xxx: " ++ show v) (return ())
                                       cmdCode <- compCmd v cmd
                                       return $ initCode ++ cmdCode ++ [HALT]
 

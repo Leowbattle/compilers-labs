@@ -103,14 +103,21 @@ checkFunction _ _ = ""
 
 checkDecls :: [Declaration] -> ST VarContext Error
 checkDecls [] = pure []
-checkDecls (d:ds) = do vars <- stState
-                       let name = declName d
-                           err = checkDuplicateDecl vars d ++
-                                 checkVarInit vars d ++
-                                 checkFunction vars d
-                       stUpdate ((name, declType d):vars)
-                       errs <- checkDecls ds
-                       return (err ++ errs)
+checkDecls (d:ds) = case d of
+   FunctionDecl _ _ _ _ -> do vars <- stState
+                              let name = declName d
+                              stUpdate ((name, declType d):vars)
+                              vars <- stState -- Could be cleaner and make checkFunction use the monad state?
+                              let err = checkFunction vars d
+                              errs <- checkDecls ds
+                              return (err ++ errs)
+   _ -> do vars <- stState
+           let name = declName d
+               err = checkDuplicateDecl vars d ++
+                     checkVarInit vars d
+           stUpdate ((name, declType d):vars)
+           errs <- checkDecls ds
+           return (err ++ errs)
 
 checkCmd :: VarContext -> Command -> Error
 checkCmd vars (Assignment id expr) = case lookup id vars of
