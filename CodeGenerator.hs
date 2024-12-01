@@ -6,9 +6,6 @@ import State
 import TypeChecker
 import Data.List (find, intercalate)
 
--- TODO Remove
-import Debug.Trace
-
 type Stack = [Int]
 
 type Label = String
