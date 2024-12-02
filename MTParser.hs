@@ -5,7 +5,7 @@ import Control.Applicative (Alternative, empty, many, (<|>))
 import Data.Char
 
 data Program = LetIn [Declaration] Command
-               deriving Show
+               deriving (Show, Eq)
 
 data Type = TyInt | TyBool deriving (Show, Eq)
 
@@ -13,7 +13,7 @@ type Identifier = String
 data Declaration = VarDecl Identifier Type |
                    VarInit Identifier Type Expr |
                    FunctionDecl Identifier [(Identifier, Type)] Type Expr
-                   deriving Show
+                   deriving (Show, Eq)
 
 declName :: Declaration -> String
 declName (VarDecl id _) = id
@@ -33,7 +33,7 @@ data Command = Assignment Identifier Expr
              | GetInt Identifier
              | PrintInt Expr
              | BeginEnd [Command]
-             deriving Show
+             deriving (Show, Eq)
 
 data Expr = Identifier Identifier
     | LitInteger Integer
@@ -42,12 +42,12 @@ data Expr = Identifier Identifier
     | UnOp UnOperator Expr
     | Conditional Expr Expr Expr
     | FunctionCall Identifier [Expr]
-    deriving Show
+    deriving (Show, Eq)
 data BinOperator = Addition | Subtraction | Multiplication | Division | BinAnd | BinOr |
                    Less | LessEq | Greater | GreaterEq | Equals | NotEquals
-    deriving Show
+    deriving (Show, Eq)
 data UnOperator = Negation | UnNot
-    deriving Show
+    deriving (Show, Eq)
 
 int :: Parser Expr
 int =  LitInteger . toInteger <$> natural
