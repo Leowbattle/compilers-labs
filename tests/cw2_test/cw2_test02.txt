@@ -1,0 +1,4 @@
+Type errors: 
+Function f: Type of expression different from declared type
+printint: you can only print integers
+compiled to TAM file: cw2_test02.tam

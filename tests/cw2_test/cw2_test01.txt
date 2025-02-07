@@ -1,0 +1,9 @@
+Type errors: 
+Variable x: Expression doesn't type-check
+Variable y: Type of expression different from declared type
+Variable y: Identifier y declared more than once
+Assignment: expression has the wrong type
+If command: test expression is not a Boolean
+printint: you can only print integers
+printint: expression doesn't type-check
+compiled to TAM file: cw2_test01.tam
