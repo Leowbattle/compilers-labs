@@ -1,0 +1,19 @@
+name = "mtcompiler"
+version = "0.1.0"
+defaultTargets = ["mtc"]
+
+[[lean_lib]]
+name = "mtcompiler"
+roots = [
+  "Parser",
+  "State",
+  "MTParser",
+  "TypeChecker",
+  "CodeGenerator",
+  "TAMParser",
+  "TAMVirtualMachine",
+]
+
+[[lean_exe]]
+name = "mtc"
+root = "Main"
