@@ -69,4 +69,4 @@ sources are untracked, so there is no tracked baseline to diff against.)*
   wrapper, and `StateIO` as a `def` rather than a nominal wrapper.
 - Known gaps left as-is: ASCII-only `Char` predicates vs Unicode `Data.Char`,
   64-bit `Int` vs arbitrary precision, `readInt` decimal-only, `1/0 = 0`, and
-  `Fuzzer.hs` not ported.
+  `Fuzzer.hs` removed.

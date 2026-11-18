@@ -29,8 +29,8 @@ no Mathlib.
 | `TAMVirtualMachine.hs` | `TAMVirtualMachine.lean` |
 | `Main.hs` | `Main.lean` |
 
-`Fuzzer.hs` is not ported. It has no module header (so it cannot be imported
-from the Haskell compiler either) and it depends on `System.Random`; it is a
+`Fuzzer.hs` was removed. It had no module header (so it could not be imported
+from the Haskell compiler either) and depended on `System.Random`; it was a
 development tool rather than part of the compiler.
 
 ## Deliberate differences
