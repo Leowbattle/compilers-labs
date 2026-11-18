@@ -1,0 +1,25 @@
+cabal-version:      3.0
+name:               mt-compiler
+version:            0.1.0.0
+synopsis:           MT compiler (CW2)
+build-type:         Simple
+license:            NONE
+
+library
+  exposed-modules:
+      CodeGenerator
+      MTParser
+      Parser
+      State
+      TAMParser
+      TAMVirtualMachine
+      TypeChecker
+  hs-source-dirs:   src
+  build-depends:    base >=4.18 && <5
+  default-language: Haskell2010
+
+executable mtc
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  build-depends:    base, mt-compiler
+  default-language: Haskell2010
