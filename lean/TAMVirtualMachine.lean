@@ -6,6 +6,8 @@ import Parser
 import State
 import CodeGenerator
 
+open TAMInst StackMode AddressOperation
+
 structure TAMState where
   tsCode : List TAMInst
   tsCounter : Int
@@ -76,7 +78,7 @@ def findLabelIdx : Nat → List TAMInst → Label → Option Nat
   | _, [], _ => none
   | i, x :: xs, l =>
       match x with
-      | TAMInst.LABEL l' => if l == l' then some i else findLabelIdx (i + 1) xs l
+      | LABEL l' => if l == l' then some i else findLabelIdx (i + 1) xs l
       | _ => findLabelIdx (i + 1) xs l
 
 def lookupLabel (prog : List TAMInst) (l : Label) : Int :=
@@ -106,8 +108,8 @@ def jumpToLabel (l : Label) : StateIO TAMState Unit := do
 
 def varLookup (mode : StackMode) (op : AddressOperation) (a : Int) : StateIO TAMState Int := do
   let st ← stStateT
-  let base := if mode == StackMode.StackBase then st.tsSB else st.tsLB
-  let offset := if op == AddressOperation.Plus then a else -a
+  let base := if mode == StackBase then st.tsSB else st.tsLB
+  let offset := if op == Plus then a else -a
   return (Int.ofNat st.tsStack.length) - (base + offset) - 1
 
 def getVar (mode : StackMode) (op : AddressOperation) (a : Int) : StateIO TAMState Int := do
@@ -143,119 +145,119 @@ def readInt (s : String) : Int :=
 
 def executeT (inst : TAMInst) : StateIO TAMState Unit :=
   match inst with
-  | TAMInst.LOADL x => do
+  | LOADL x => do
       pushT x
       continueT
 
-  | TAMInst.ADD => do
+  | ADD => do
       let x ← popT
       let y ← popT
       pushT (x + y)
       continueT
 
-  | TAMInst.SUB => do
+  | SUB => do
       let x ← popT
       let y ← popT
       pushT (y - x)
       continueT
 
-  | TAMInst.MUL => do
+  | MUL => do
       let x ← popT
       let y ← popT
       pushT (x * y)
       continueT
 
-  | TAMInst.DIV => do
+  | DIV => do
       let x ← popT
       let y ← popT
       pushT (Int.fdiv y x)
       continueT
 
-  | TAMInst.LSS => do
+  | LSS => do
       let y ← popT
       let x ← popT
       pushT (if x < y then 1 else 0)
       continueT
 
-  | TAMInst.GRT => do
+  | GRT => do
       let y ← popT
       let x ← popT
       pushT (if x > y then 1 else 0)
       continueT
 
-  | TAMInst.EQL => do
+  | EQL => do
       let x ← popT
       let y ← popT
       pushT (if x == y then 1 else 0)
       continueT
 
-  | TAMInst.AND => do
+  | AND => do
       let x ← popT
       let y ← popT
       pushT (boolAnd x y)
       continueT
 
-  | TAMInst.OR => do
+  | OR => do
       let x ← popT
       let y ← popT
       pushT (boolOr x y)
       continueT
 
-  | TAMInst.NOT => do
+  | NOT => do
       let x ← popT
       pushT (boolNot x)
       continueT
 
-  | TAMInst.NEG => do
+  | NEG => do
       let x ← popT
       pushT (-x)
       continueT
 
-  | TAMInst.HALT => countUpdateT (-1)
+  | HALT => countUpdateT (-1)
 
-  | TAMInst.GETINT => do
+  | GETINT => do
       lift (IO.println "Enter a number: ")
       let stdin ← lift IO.getStdin
       let x ← lift stdin.getLine
       pushT (readInt x)
       continueT
 
-  | TAMInst.PUTINT => do
+  | PUTINT => do
       lift (IO.print "output > ")
       let x ← popT
       lift (IO.println x)
       continueT
 
-  | TAMInst.LABEL _ => continueT
+  | LABEL _ => continueT
 
-  | TAMInst.JUMP l => jumpToLabel l
+  | JUMP l => jumpToLabel l
 
-  | TAMInst.JUMPIFZ l => do
+  | JUMPIFZ l => do
       let x ← popT
       if x == 0 then
         jumpToLabel l
       else
         continueT
 
-  | TAMInst.LOAD mode op a => do
+  | LOAD mode op a => do
       let x ← getVar mode op a
       pushT x
       continueT
 
-  | TAMInst.STORE mode op a => do
+  | STORE mode op a => do
       let x ← popT
       let addr ← varLookup mode op a
       setVar addr x
       continueT
 
-  | TAMInst.CALL l => do
+  | CALL l => do
       let st ← stStateT
       pushT st.tsLB
       pushT (st.tsCounter + 1)
       tsSetLBT (Int.ofNat st.tsStack.length)
       jumpToLabel l
 
-  | TAMInst.RETURN n m => do
+  | RETURN n m => do
       let retVal ← replicateMT n.toNat popT
       let ra ← popT
       let lb ← popT

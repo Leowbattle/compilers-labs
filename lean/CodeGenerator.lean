@@ -7,6 +7,10 @@ import MTParser
 import State
 import TypeChecker
 
+open Command Declaration Program BinOperator UnOperator
+-- Excludes `Identifier`, which would otherwise shadow the `Identifier` type alias.
+open Expr (LitInteger LitBool BinOp UnOp Conditional FunctionCall)
+
 abbrev Stack := List Int
 
 abbrev Label := String
@@ -16,30 +20,34 @@ inductive StackMode
   | LocalBase
   deriving BEq, Inhabited
 
+open StackMode
+
 instance : ToString StackMode where
   toString
-    | StackMode.StackBase => "SB"
-    | StackMode.LocalBase => "LB"
+    | StackBase => "SB"
+    | LocalBase => "LB"
 
 instance : Repr StackMode where
   reprPrec
-    | StackMode.StackBase, _ => "SB"
-    | StackMode.LocalBase, _ => "LB"
+    | StackBase, _ => "SB"
+    | LocalBase, _ => "LB"
 
 inductive AddressOperation
   | Plus
   | Minus
   deriving BEq, Inhabited
 
+open AddressOperation
+
 instance : ToString AddressOperation where
   toString
-    | AddressOperation.Plus => "+"
-    | AddressOperation.Minus => "-"
+    | Plus => "+"
+    | Minus => "-"
 
 instance : Repr AddressOperation where
   reprPrec
-    | AddressOperation.Plus, _ => "+"
-    | AddressOperation.Minus, _ => "-"
+    | Plus, _ => "+"
+    | Minus, _ => "-"
 
 inductive TAMInst
   | LOADL (x : Int)
@@ -66,31 +74,33 @@ inductive TAMInst
   | STORE (mode : StackMode) (op : AddressOperation) (a : Int)
   deriving BEq, Repr, Inhabited
 
+open TAMInst
+
 instance : ToString TAMInst where
   toString
-    | TAMInst.LOADL x => "LOADL " ++ toString x
-    | TAMInst.ADD => "ADD"
-    | TAMInst.SUB => "SUB"
-    | TAMInst.MUL => "MUL"
-    | TAMInst.DIV => "DIV"
-    | TAMInst.NEG => "NEG"
-    | TAMInst.AND => "AND"
-    | TAMInst.OR => "OR"
-    | TAMInst.NOT => "NOT"
-    | TAMInst.LSS => "LSS"
-    | TAMInst.GRT => "GRT"
-    | TAMInst.EQL => "EQL"
-    | TAMInst.HALT => "HALT"
-    | TAMInst.GETINT => "GETINT"
-    | TAMInst.PUTINT => "PUTINT"
-    | TAMInst.LABEL l => "LABEL " ++ l
-    | TAMInst.JUMP l => "JUMP " ++ l
-    | TAMInst.JUMPIFZ l => "JUMPIFZ " ++ l
-    | TAMInst.CALL l => "CALL " ++ l
-    | TAMInst.RETURN x y => "RETURN " ++ toString x ++ " " ++ toString y
-    | TAMInst.LOAD mode op a =>
+    | LOADL x => "LOADL " ++ toString x
+    | ADD => "ADD"
+    | SUB => "SUB"
+    | MUL => "MUL"
+    | DIV => "DIV"
+    | NEG => "NEG"
+    | AND => "AND"
+    | OR => "OR"
+    | NOT => "NOT"
+    | LSS => "LSS"
+    | GRT => "GRT"
+    | EQL => "EQL"
+    | HALT => "HALT"
+    | GETINT => "GETINT"
+    | PUTINT => "PUTINT"
+    | LABEL l => "LABEL " ++ l
+    | JUMP l => "JUMP " ++ l
+    | JUMPIFZ l => "JUMPIFZ " ++ l
+    | CALL l => "CALL " ++ l
+    | RETURN x y => "RETURN " ++ toString x ++ " " ++ toString y
+    | LOAD mode op a =>
         "LOAD [" ++ toString mode ++ " " ++ toString op ++ " " ++ toString a ++ "]"
-    | TAMInst.STORE mode op a =>
+    | STORE mode op a =>
         "STORE [" ++ toString mode ++ " " ++ toString op ++ " " ++ toString a ++ "]"
 
 def showTAM (prog : List TAMInst) : String :=
@@ -127,125 +137,125 @@ mutual
 
   partial def expCode (v : VarEnv) (e : Expr) : St Int (List TAMInst) :=
     match e with
-    | Expr.LitInteger x => return [TAMInst.LOADL x]
-    | Expr.LitBool x => return [TAMInst.LOADL (fromBool x)]
+    | LitInteger x => return [LOADL x]
+    | LitBool x => return [LOADL (fromBool x)]
     | Expr.Identifier x =>
         return (match varAddr v x with
-          | (StackMode.StackBase, offset) => [TAMInst.LOAD StackMode.StackBase AddressOperation.Plus offset]
-          | (StackMode.LocalBase, offset) => [TAMInst.LOAD StackMode.LocalBase AddressOperation.Minus offset])
+          | (StackBase, offset) => [LOAD StackBase Plus offset]
+          | (LocalBase, offset) => [LOAD LocalBase Minus offset])
 
-    | Expr.BinOp BinOperator.Addition x y => binOpCode [TAMInst.ADD] v x y
-    | Expr.BinOp BinOperator.Subtraction x y => binOpCode [TAMInst.SUB] v x y
-    | Expr.BinOp BinOperator.Multiplication x y => binOpCode [TAMInst.MUL] v x y
-    | Expr.BinOp BinOperator.Division x y => binOpCode [TAMInst.DIV] v x y
+    | BinOp Addition x y => binOpCode [ADD] v x y
+    | BinOp Subtraction x y => binOpCode [SUB] v x y
+    | BinOp Multiplication x y => binOpCode [MUL] v x y
+    | BinOp Division x y => binOpCode [DIV] v x y
 
-    | Expr.BinOp BinOperator.BinAnd x y => binOpCode [TAMInst.AND] v x y
-    | Expr.BinOp BinOperator.BinOr x y => binOpCode [TAMInst.OR] v x y
+    | BinOp BinAnd x y => binOpCode [AND] v x y
+    | BinOp BinOr x y => binOpCode [OR] v x y
 
-    | Expr.BinOp BinOperator.Less x y => binOpCode [TAMInst.LSS] v x y
-    | Expr.BinOp BinOperator.LessEq x y => binOpCode [TAMInst.LOADL 1, TAMInst.ADD, TAMInst.LSS] v x y
+    | BinOp Less x y => binOpCode [LSS] v x y
+    | BinOp LessEq x y => binOpCode [LOADL 1, ADD, LSS] v x y
 
-    | Expr.BinOp BinOperator.Greater x y => binOpCode [TAMInst.GRT] v x y
-    | Expr.BinOp BinOperator.GreaterEq x y => binOpCode [TAMInst.LOADL 1, TAMInst.SUB, TAMInst.GRT] v x y
+    | BinOp Greater x y => binOpCode [GRT] v x y
+    | BinOp GreaterEq x y => binOpCode [LOADL 1, SUB, GRT] v x y
 
-    | Expr.BinOp BinOperator.Equals x y => binOpCode [TAMInst.EQL] v x y
-    | Expr.BinOp BinOperator.NotEquals x y => binOpCode [TAMInst.EQL, TAMInst.NOT] v x y
+    | BinOp Equals x y => binOpCode [EQL] v x y
+    | BinOp NotEquals x y => binOpCode [EQL, NOT] v x y
 
-    | Expr.UnOp UnOperator.Negation x => unOpCode [TAMInst.NEG] v x
-    | Expr.UnOp UnOperator.UnNot x => unOpCode [TAMInst.NOT] v x
+    | UnOp Negation x => unOpCode [NEG] v x
+    | UnOp UnNot x => unOpCode [NOT] v x
 
-    | Expr.Conditional cond yes no => do
+    | Conditional cond yes no => do
         let condcode ← expCode v cond
         let yescode ← expCode v yes
         let l1 ← getLabel
         let nocode ← expCode v no
         let l2 ← getLabel
         return (condcode ++
-                [TAMInst.JUMPIFZ l1] ++
+                [JUMPIFZ l1] ++
                 yescode ++
-                [TAMInst.JUMP l2, TAMInst.LABEL l1] ++
+                [JUMP l2, LABEL l1] ++
                 nocode ++
-                [TAMInst.LABEL l2])
+                [LABEL l2])
 
-    | Expr.FunctionCall id args => do
+    | FunctionCall id args => do
         let argscode ← List.flatten <$> args.mapM (expCode v)
-        return (argscode ++ [TAMInst.CALL id])
+        return (argscode ++ [CALL id])
 end
 
 partial def compCmd (v : VarEnv) (cmd : Command) : St Int (List TAMInst) :=
   match cmd with
-  | Command.Assignment x expr => do
+  | Assignment x expr => do
       let ecode ← expCode v expr
       let store := match varAddr v x with
-        | (StackMode.StackBase, offset) => [TAMInst.STORE StackMode.StackBase AddressOperation.Plus offset]
-        | (StackMode.LocalBase, offset) => [TAMInst.STORE StackMode.LocalBase AddressOperation.Minus offset]
+        | (StackBase, offset) => [STORE StackBase Plus offset]
+        | (LocalBase, offset) => [STORE LocalBase Minus offset]
       return (ecode ++ store)
 
-  | Command.IfThenElse expr yes no => do
+  | IfThenElse expr yes no => do
       let ecode ← expCode v expr
       let yescode ← compCmd v yes
       let l1 ← getLabel
       let nocode ← compCmd v no
       let l2 ← getLabel
       return (ecode ++
-              [TAMInst.JUMPIFZ l1] ++
+              [JUMPIFZ l1] ++
               yescode ++
-              [TAMInst.JUMP l2, TAMInst.LABEL l1] ++
+              [JUMP l2, LABEL l1] ++
               nocode ++
-              [TAMInst.LABEL l2])
+              [LABEL l2])
 
-  | Command.While expr cmd => do
+  | While expr cmd => do
       let ecode ← expCode v expr
       let l1 ← getLabel
       let cmdCode ← compCmd v cmd
       let l2 ← getLabel
-      return ([TAMInst.LABEL l1] ++
+      return ([LABEL l1] ++
               ecode ++
-              [TAMInst.JUMPIFZ l2] ++
+              [JUMPIFZ l2] ++
               cmdCode ++
-              [TAMInst.JUMP l1, TAMInst.LABEL l2])
+              [JUMP l1, LABEL l2])
 
-  | Command.GetInt x =>
+  | GetInt x =>
       return (match varAddr v x with
-        | (StackMode.StackBase, offset) => [TAMInst.GETINT, TAMInst.STORE StackMode.StackBase AddressOperation.Plus offset]
-        | (StackMode.LocalBase, offset) => [TAMInst.GETINT, TAMInst.STORE StackMode.LocalBase AddressOperation.Minus offset])
+        | (StackBase, offset) => [GETINT, STORE StackBase Plus offset]
+        | (LocalBase, offset) => [GETINT, STORE LocalBase Minus offset])
 
-  | Command.PrintInt expr => do
+  | PrintInt expr => do
       let ecode ← expCode v expr
-      return (ecode ++ [TAMInst.PUTINT])
+      return (ecode ++ [PUTINT])
 
-  | Command.BeginEnd [] => return []
-  | Command.BeginEnd (c :: cs) => do
+  | BeginEnd [] => return []
+  | BeginEnd (c :: cs) => do
       let ccode ← compCmd v c
-      let cscode ← compCmd v (Command.BeginEnd cs)
+      let cscode ← compCmd v (BeginEnd cs)
       return (ccode ++ cscode)
 
 partial def compileVars (inst : List TAMInst) (ds : List Declaration) (v : VarEnv) : St Int (VarEnv × List TAMInst) :=
   match ds with
   | [] => return (v, inst)
-  | Declaration.VarDecl id _ty :: rest =>
-      let v' := (id, (StackMode.StackBase, (Int.ofNat v.length))) :: v
-      compileVars (inst ++ [TAMInst.LOADL 0]) rest v'
-  | Declaration.VarInit id _ty e :: rest => do
-      let v' := (id, (StackMode.StackBase, (Int.ofNat v.length))) :: v
+  | VarDecl id _ty :: rest =>
+      let v' := (id, (StackBase, (Int.ofNat v.length))) :: v
+      compileVars (inst ++ [LOADL 0]) rest v'
+  | VarInit id _ty e :: rest => do
+      let v' := (id, (StackBase, (Int.ofNat v.length))) :: v
       let ecode ← expCode v e
       compileVars (inst ++ ecode) rest v'
-  | Declaration.FunctionDecl _ _ _ _ :: rest => compileVars inst rest v
+  | FunctionDecl _ _ _ _ :: rest => compileVars inst rest v
 
 def compileFunction (v : VarEnv) : Declaration → St Int (List TAMInst)
-  | Declaration.FunctionDecl id args _ret e => do
-      let v' := args.reverse.zipWith (fun (arg, _) i => (arg, (StackMode.LocalBase, i)))
+  | FunctionDecl id args _ret e => do
+      let v' := args.reverse.zipWith (fun (arg, _) i => (arg, (LocalBase, i)))
                                       (List.range' 1 args.length) ++ v
       let ecode ← expCode v' e
-      return ([TAMInst.LABEL id] ++ ecode ++ [TAMInst.RETURN 1 (Int.ofNat args.length)])
+      return ([LABEL id] ++ ecode ++ [RETURN 1 (Int.ofNat args.length)])
   | _ => return []
 
 def compileProgram : Program → St Int (List TAMInst)
-  | Program.LetIn decls cmd => do
+  | LetIn decls cmd => do
       let (v, initCode) ← compileVars [] decls []
       let cmdCode ← compCmd v cmd
       let funcCode ← List.flatten <$> decls.mapM (compileFunction v)
-      return (initCode ++ cmdCode ++ [TAMInst.HALT] ++ funcCode)
+      return (initCode ++ cmdCode ++ [HALT] ++ funcCode)
 
 def compileMT (s : String) : List TAMInst × Error :=
   let ast := parseMT s

@@ -68,17 +68,21 @@ inductive Program
   | LetIn (decls : List Declaration) (cmd : Command)
   deriving BEq, Repr, Inhabited
 
+open MTType BinOperator UnOperator Command Declaration VFType Program
+-- Excludes `Identifier`, which would otherwise shadow the `Identifier` type alias.
+open Expr (LitInteger LitBool BinOp UnOp Conditional FunctionCall)
+
 def declName : Declaration → String
-  | Declaration.VarDecl id _ => id
-  | Declaration.VarInit id _ _ => id
-  | Declaration.FunctionDecl id _ _ _ => id
+  | VarDecl id _ => id
+  | VarInit id _ _ => id
+  | FunctionDecl id _ _ _ => id
 
 def declType : Declaration → VFType
-  | Declaration.VarDecl _ ty => VFType.VarType ty
-  | Declaration.VarInit _ ty _ => VFType.VarType ty
-  | Declaration.FunctionDecl _ args ret _ => VFType.FunType (args.map Prod.snd) ret
+  | VarDecl _ ty => VarType ty
+  | VarInit _ ty _ => VarType ty
+  | FunctionDecl _ args ret _ => FunType (args.map Prod.snd) ret
 
-def int : Parser Expr := Expr.LitInteger <$> natural
+def int : Parser Expr := LitInteger <$> natural
 
 def operator (ops : List (String × BinOperator)) (p : Parser Expr) : Parser Expr := do
   let x ← p
@@ -87,7 +91,7 @@ def operator (ops : List (String × BinOperator)) (p : Parser Expr) : Parser Exp
     let m ← p
     return (op, m))
   let xs ← many (alts.foldl (· <|> ·) empty)
-  return xs.foldl (fun a (op, m) => Expr.BinOp op a m) x
+  return xs.foldl (fun a (op, m) => BinOp op a m) x
 
 def identifier : Parser Identifier := do
   let c ← satisfy item Char.isAlpha
@@ -119,47 +123,47 @@ mutual
     let x ← orExp
     let _ ← token (string ":")
     let y ← expr
-    return Expr.Conditional cond x y
+    return Conditional cond x y
 
-  partial def orExp : Parser Expr := operator [("||", BinOperator.BinOr)] andExp
+  partial def orExp : Parser Expr := operator [("||", BinOr)] andExp
 
-  partial def andExp : Parser Expr := operator [("&&", BinOperator.BinAnd)] notExp
+  partial def andExp : Parser Expr := operator [("&&", BinAnd)] notExp
 
   partial def notExp : Parser Expr :=
     (do
       let _ ← token (string "!")
       let e ← term
-      return Expr.UnOp UnOperator.UnNot e) <|>
+      return UnOp UnNot e) <|>
     compExp
 
-  partial def compExp : Parser Expr := operator [("<", BinOperator.Less),
-                                                  ("<=", BinOperator.LessEq),
-                                                  (">", BinOperator.Greater),
-                                                  (">=", BinOperator.GreaterEq),
-                                                  ("==", BinOperator.Equals),
-                                                  ("!=", BinOperator.NotEquals)] addExp
+  partial def compExp : Parser Expr := operator [("<", Less),
+                                                  ("<=", LessEq),
+                                                  (">", Greater),
+                                                  (">=", GreaterEq),
+                                                  ("==", Equals),
+                                                  ("!=", NotEquals)] addExp
 
-  partial def addExp : Parser Expr := operator [("+", BinOperator.Addition), ("-", BinOperator.Subtraction)] mexp
+  partial def addExp : Parser Expr := operator [("+", Addition), ("-", Subtraction)] mexp
 
-  partial def mexp : Parser Expr := operator [("*", BinOperator.Multiplication), ("/", BinOperator.Division)] term
+  partial def mexp : Parser Expr := operator [("*", Multiplication), ("/", Division)] term
 
   partial def term : Parser Expr := token (do
     (do
       let _ ← token (string "false")
-      return Expr.LitBool false) <|>
+      return LitBool false) <|>
     (do
       let _ ← token (string "true")
-      return Expr.LitBool true) <|>
+      return LitBool true) <|>
     (do
       let id ← identifier
       let args ← parenList "(" expr ")"
-      return Expr.FunctionCall id args) <|>
+      return FunctionCall id args) <|>
     int <|>
     (Expr.Identifier <$> identifier) <|>
     (do
       let _ ← token (string "-")
       let t ← term
-      return Expr.UnOp UnOperator.Negation t) <|>
+      return UnOp Negation t) <|>
     (do
       let _ ← token (string "(")
       let e ← expr
@@ -179,10 +183,10 @@ partial def exprs : Parser (List Expr) :=
 def typeP : Parser MTType :=
   (do
     let _ ← string "Integer"
-    return MTType.TyInt) <|>
+    return TyInt) <|>
   (do
     let _ ← string "Boolean"
-    return MTType.TyBool)
+    return TyBool)
 
 def argDeclaration : Parser (Identifier × MTType) := do
   let id ← identifier
@@ -198,13 +202,13 @@ def declaration : Parser Declaration :=
     let ty ← typeP
     let _ ← token (string ":=")
     let e ← expr
-    return Declaration.VarInit id ty e) <|>
+    return VarInit id ty e) <|>
   (do
     let _ ← token (string "var")
     let id ← identifier
     let _ ← token (string ":")
     let ty ← typeP
-    return Declaration.VarDecl id ty) <|>
+    return VarDecl id ty) <|>
   (do
     let _ ← token (string "fun")
     let id ← identifier
@@ -213,7 +217,7 @@ def declaration : Parser Declaration :=
     let ty ← typeP
     let _ ← token (string "=")
     let e ← expr
-    return Declaration.FunctionDecl id args ty e)
+    return FunctionDecl id args ty e)
 
 partial def declarations : Parser (List Declaration) :=
   (do
@@ -234,35 +238,35 @@ mutual
       let yes ← command
       let _ ← token (string "else")
       let no ← command
-      return Command.IfThenElse e yes no) <|>
+      return IfThenElse e yes no) <|>
     (do
       let _ ← token (string "while")
       let e ← expr
       let _ ← token (string "do")
       let c ← command
-      return Command.While e c) <|>
+      return While e c) <|>
     (do
       let _ ← token (string "getint")
       let _ ← token (string "(")
       let id ← identifier
       let _ ← token (string ")")
-      return Command.GetInt id) <|>
+      return GetInt id) <|>
     (do
       let _ ← token (string "printint")
       let _ ← token (string "(")
       let e ← expr
       let _ ← token (string ")")
-      return Command.PrintInt e) <|>
+      return PrintInt e) <|>
     (do
       let _ ← token (string "begin")
       let cs ← commands
       let _ ← token (string "end")
-      return Command.BeginEnd cs) <|>
+      return BeginEnd cs) <|>
     (do
       let id ← identifier
       let _ ← token (string ":=")
       let e ← expr
-      return Command.Assignment id e)
+      return Assignment id e)
 
   partial def commands : Parser (List Command) :=
     (do
@@ -280,7 +284,7 @@ def program : Parser Program := do
   let ds ← declarations
   let _ ← token (string "in")
   let c ← command
-  return Program.LetIn ds c
+  return LetIn ds c
 
 def parseMT (s : String) : Program :=
   match parse program s with
