@@ -4,7 +4,6 @@
 
 import Parser
 import MTParser
-import State
 import TypeChecker
 
 open Command Declaration Program BinOperator UnOperator
@@ -120,22 +119,22 @@ def fromBool : Bool → Int
 def varAddr (v : VarEnv) (x : String) : StackMode × Int :=
   fromJust (List.lookup x v)
 
-def getLabel : St Int Label := do
-  let n ← stState
-  stUpdate (n + 1)
+def getLabel : StateM Int Label := do
+  let n ← get
+  set (n + 1)
   return "#" ++ toString n
 
 mutual
-  partial def binOpCode (inst : List TAMInst) (v : VarEnv) (x y : Expr) : St Int (List TAMInst) := do
+  partial def binOpCode (inst : List TAMInst) (v : VarEnv) (x y : Expr) : StateM Int (List TAMInst) := do
     let xcode ← expCode v x
     let ycode ← expCode v y
     return (xcode ++ ycode ++ inst)
 
-  partial def unOpCode (inst : List TAMInst) (v : VarEnv) (x : Expr) : St Int (List TAMInst) := do
+  partial def unOpCode (inst : List TAMInst) (v : VarEnv) (x : Expr) : StateM Int (List TAMInst) := do
     let xcode ← expCode v x
     return (xcode ++ inst)
 
-  partial def expCode (v : VarEnv) (e : Expr) : St Int (List TAMInst) :=
+  partial def expCode (v : VarEnv) (e : Expr) : StateM Int (List TAMInst) :=
     match e with
     | LitInteger x => return [LOADL x]
     | LitBool x => return [LOADL (fromBool x)]
@@ -182,7 +181,7 @@ mutual
         return (argscode ++ [CALL id])
 end
 
-partial def compCmd (v : VarEnv) (cmd : Command) : St Int (List TAMInst) :=
+partial def compCmd (v : VarEnv) (cmd : Command) : StateM Int (List TAMInst) :=
   match cmd with
   | Assignment x expr => do
       let ecode ← expCode v expr
@@ -230,7 +229,7 @@ partial def compCmd (v : VarEnv) (cmd : Command) : St Int (List TAMInst) :=
       let cscode ← compCmd v (BeginEnd cs)
       return (ccode ++ cscode)
 
-partial def compileVars (inst : List TAMInst) (ds : List Declaration) (v : VarEnv) : St Int (VarEnv × List TAMInst) :=
+partial def compileVars (inst : List TAMInst) (ds : List Declaration) (v : VarEnv) : StateM Int (VarEnv × List TAMInst) :=
   match ds with
   | [] => return (v, inst)
   | VarDecl id _ty :: rest =>
@@ -242,7 +241,7 @@ partial def compileVars (inst : List TAMInst) (ds : List Declaration) (v : VarEn
       compileVars (inst ++ ecode) rest v'
   | FunctionDecl _ _ _ _ :: rest => compileVars inst rest v
 
-def compileFunction (v : VarEnv) : Declaration → St Int (List TAMInst)
+def compileFunction (v : VarEnv) : Declaration → StateM Int (List TAMInst)
   | FunctionDecl id args _ret e => do
       let v' := args.reverse.zipWith (fun (arg, _) i => (arg, (LocalBase, i)))
                                       (List.range' 1 args.length) ++ v
@@ -250,7 +249,7 @@ def compileFunction (v : VarEnv) : Declaration → St Int (List TAMInst)
       return ([LABEL id] ++ ecode ++ [RETURN 1 (Int.ofNat args.length)])
   | _ => return []
 
-def compileProgram : Program → St Int (List TAMInst)
+def compileProgram : Program → StateM Int (List TAMInst)
   | LetIn decls cmd => do
       let (v, initCode) ← compileVars [] decls []
       let cmdCode ← compCmd v cmd
@@ -259,6 +258,6 @@ def compileProgram : Program → St Int (List TAMInst)
 
 def compileMT (s : String) : List TAMInst × Error :=
   let ast := parseMT s
-  let err := (app (checkProgram ast) []).1
-  let inst := if err == "" then (app (compileProgram ast) 0).1 else []
+  let err := (StateT.run (checkProgram ast) []).1
+  let inst := if err == "" then (StateT.run (compileProgram ast) 0).1 else []
   (inst, err)

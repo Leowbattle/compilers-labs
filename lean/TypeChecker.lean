@@ -4,7 +4,6 @@
 
 import MTParser
 import Parser
-import State
 
 open MTType VFType Command Declaration Program BinOperator UnOperator
 -- Excludes `Identifier`, which would otherwise shadow the `Identifier` type alias.
@@ -126,23 +125,23 @@ def checkFunction (vars : VarContext) : Declaration → Error
             "Function " ++ id ++ ": Type of expression is different from return type of function\n"
   | _ => ""
 
-partial def checkDecls : List Declaration → St VarContext Error
+partial def checkDecls : List Declaration → StateM VarContext Error
   | [] => pure ""
   | d :: ds =>
       match d with
       | FunctionDecl _ _ _ _ => do
-          let vars ← stState
+          let vars ← get
           let name := declName d
-          stUpdate ((name, declType d) :: vars)
-          let vars ← stState
+          set ((name, declType d) :: vars)
+          let vars ← get
           let err := checkFunction vars d
           let errs ← checkDecls ds
           return (err ++ errs)
       | _ => do
-          let vars ← stState
+          let vars ← get
           let name := declName d
           let err := checkDuplicateDecl vars d ++ checkVarInit vars d
-          stUpdate ((name, declType d) :: vars)
+          set ((name, declType d) :: vars)
           let errs ← checkDecls ds
           return (err ++ errs)
 
@@ -188,10 +187,10 @@ def checkCmd (vars : VarContext) : Command → Error
 
   | BeginEnd cmds => String.join (cmds.map (checkCmd vars))
 
-def checkProgram : Program → St VarContext Error
+def checkProgram : Program → StateM VarContext Error
   | LetIn ds cmd => do
       let ed ← checkDecls ds
-      let vars ← stState
+      let vars ← get
       let ec := checkCmd vars cmd
       return (ed ++ ec)
 
