@@ -21,13 +21,14 @@ no Mathlib.
 | Haskell | Lean |
 |---|---|
 | `Parser.hs` | `Parser.lean` |
-| `State.hs` | `State.lean` |
 | `MTParser.hs` | `MTParser.lean` |
 | `TAMParser.hs` | `TAMParser.lean` |
 | `TypeChecker.hs` | `TypeChecker.lean` |
 | `CodeGenerator.hs` | `CodeGenerator.lean` |
 | `TAMVirtualMachine.hs` | `TAMVirtualMachine.lean` |
 | `Main.hs` | `Main.lean` |
+
+`State.hs` is not ported as a module; the Lean code uses `StateM`/`StateT` directly.
 
 `Fuzzer.hs` was removed. It had no module header (so it could not be imported
 from the Haskell compiler either) and depended on `System.Random`; it was a
@@ -38,13 +39,10 @@ development tool rather than part of the compiler.
 These are forced by Lean or by the absence of Haskell's laziness/partiality.
 They do not change the observable behaviour of well-formed programs.
 
-- **Names.** `Type` is called `MTType` (Lean reserves `Type`), and `ST` is
-  called `St` (Lean already has an `ST` monad).
-- **State monads.** `State.lean` is a 1:1 port of Haskell's `ST`/`StateIO`.
-  Lean's `StateM σ α` and `StateT σ IO α` are definitionally the same types
-  (`σ → α × σ` and `σ → IO (α × σ)`); a later pass will move to them, using
-  `get`/`set`/`modify` and `MonadState`/`MonadLift`. The custom module is kept
-  for textual fidelity for now.
+- **Names.** `Type` is called `MTType` (Lean reserves `Type`).
+- **State monads.** `State.hs` is not ported as a module. The Lean code uses
+  Lean's `StateM σ α` / `StateT σ IO α` directly, with `get`/`set`/`modify`,
+  `StateT.run`, and `StateT.lift`.
 - **Strings.** The parser works on `Str := List Char` (Haskell's `String`),
   converting the source once in `parse`. Identifiers and TAM labels are Lean
   `String`, so `String.ofList` appears only when a token is captured; there is

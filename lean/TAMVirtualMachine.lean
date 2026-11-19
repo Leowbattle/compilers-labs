@@ -3,7 +3,6 @@
 -/
 
 import Parser
-import State
 import CodeGenerator
 
 open TAMInst StackMode AddressOperation
@@ -16,7 +15,7 @@ structure TAMState where
   tsLB : Int
   deriving Inhabited, Repr
 
-abbrev TAMSt (α : Type) := StateIO TAMState α
+abbrev TAMSt (α : Type) := StateT TAMState IO α
 
 def tsPush (x : Int) (ts : TAMState) : TAMState :=
   { ts with tsStack := x :: ts.tsStack }
@@ -33,8 +32,8 @@ def tsSetLB (lb : Int) (ts : TAMState) : TAMState :=
   { ts with tsLB := lb }
 
 def tsSetLBT (lb : Int) : TAMSt Unit := do
-  let state ← stStateT
-  stUpdateT (tsSetLB lb state)
+  let state ← get
+  set (tsSetLB lb state)
 
 def listGetInt {α : Type} [Inhabited α] (l : List α) (i : Int) : α :=
   if i < 0 then
@@ -48,30 +47,30 @@ def tsInstruction (ts : TAMState) : TAMInst :=
   listGetInt ts.tsCode ts.tsCounter
 
 def counterT : TAMSt Int := do
-  let ts ← stStateT
+  let ts ← get
   return ts.tsCounter
 
 def instructionT : TAMSt TAMInst := do
-  let st ← stStateT
+  let st ← get
   let pc ← counterT
   return (listGetInt st.tsCode pc)
 
 def countUpdateT (c : Int) : TAMSt Unit := do
-  let ts ← stStateT
-  stUpdateT { ts with tsCounter := c }
+  let ts ← get
+  set { ts with tsCounter := c }
 
 def continueT : TAMSt Unit := do
   let c ← counterT
   countUpdateT (c + 1)
 
 def pushT (x : Int) : TAMSt Unit := do
-  let ts ← stStateT
-  stUpdateT (tsPush x ts)
+  let ts ← get
+  set (tsPush x ts)
 
 def popT : TAMSt Int := do
-  let ts ← stStateT
+  let ts ← get
   let (x, ts') := tsPop ts
-  stUpdateT ts'
+  set ts'
   return x
 
 def findLabelIdx : Nat → List TAMInst → Label → Option Nat
@@ -102,26 +101,26 @@ def boolNot (x : Int) : Int :=
   | 0 => 1
   | _ => 0
 
-def jumpToLabel (l : Label) : StateIO TAMState Unit := do
-  let st ← stStateT
+def jumpToLabel (l : Label) : TAMSt Unit := do
+  let st ← get
   countUpdateT (lookupLabel st.tsCode l)
 
-def varLookup (mode : StackMode) (op : AddressOperation) (a : Int) : StateIO TAMState Int := do
-  let st ← stStateT
+def varLookup (mode : StackMode) (op : AddressOperation) (a : Int) : TAMSt Int := do
+  let st ← get
   let base := if mode == StackBase then st.tsSB else st.tsLB
   let offset := if op == Plus then a else -a
   return (Int.ofNat st.tsStack.length) - (base + offset) - 1
 
-def getVar (mode : StackMode) (op : AddressOperation) (a : Int) : StateIO TAMState Int := do
-  let st ← stStateT
+def getVar (mode : StackMode) (op : AddressOperation) (a : Int) : TAMSt Int := do
+  let st ← get
   let addr ← varLookup mode op a
   return (listGetInt st.tsStack addr)
 
-def setVar (a x : Int) : StateIO TAMState Unit := do
-  let ts ← stStateT
+def setVar (a x : Int) : TAMSt Unit := do
+  let ts ← get
   let (as, rest) := ts.tsStack.splitAt a.toNat
   match rest with
-  | _ :: bs => stUpdateT { ts with tsStack := as ++ [x] ++ bs }
+  | _ :: bs => set { ts with tsStack := as ++ [x] ++ bs }
   | [] => panic! "setVar: index out of bounds"
 
 partial def replicateMT {α : Type} : Nat → TAMSt α → TAMSt (List α)
@@ -143,7 +142,7 @@ def readInt (s : String) : Int :=
   | some x => x
   | none => panic! "Prelude.read: no parse"
 
-def executeT (inst : TAMInst) : StateIO TAMState Unit :=
+def executeT (inst : TAMInst) : TAMSt Unit :=
   match inst with
   | LOADL x => do
       pushT x
@@ -216,16 +215,16 @@ def executeT (inst : TAMInst) : StateIO TAMState Unit :=
   | HALT => countUpdateT (-1)
 
   | GETINT => do
-      lift (IO.println "Enter a number: ")
-      let stdin ← lift IO.getStdin
-      let x ← lift stdin.getLine
+      StateT.lift (IO.println "Enter a number: ")
+      let stdin ← StateT.lift IO.getStdin
+      let x ← StateT.lift stdin.getLine
       pushT (readInt x)
       continueT
 
   | PUTINT => do
-      lift (IO.print "output > ")
+      StateT.lift (IO.print "output > ")
       let x ← popT
-      lift (IO.println x)
+      StateT.lift (IO.println x)
       continueT
 
   | LABEL _ => continueT
@@ -251,7 +250,7 @@ def executeT (inst : TAMInst) : StateIO TAMState Unit :=
       continueT
 
   | CALL l => do
-      let st ← stStateT
+      let st ← get
       pushT st.tsLB
       pushT (st.tsCounter + 1)
       tsSetLBT (Int.ofNat st.tsStack.length)
@@ -266,7 +265,7 @@ def executeT (inst : TAMInst) : StateIO TAMState Unit :=
       tsSetLBT lb
       countUpdateT ra
 
-partial def execTAM : StateIO TAMState Unit := do
+partial def execTAM : TAMSt Unit := do
   let inst ← instructionT
   executeT inst
   let pc ← counterT
@@ -282,20 +281,20 @@ def showIntList (xs : List Int) : String :=
   "[" ++ String.intercalate "," (xs.map toString) ++ "]"
 
 def runTAM (prog : List TAMInst) : IO Stack := do
-  let (_, st) ← appT execTAM (initialState prog)
+  let (_, st) ← StateT.run execTAM (initialState prog)
   return st.tsStack
 
-partial def traceTAM' : StateIO TAMState Unit := do
+partial def traceTAM' : TAMSt Unit := do
   let inst ← instructionT
   executeT inst
-  let st ← stStateT
+  let st ← get
   let pc ← counterT
   if pc == -1 then
     return ()
   else do
-    lift (IO.println (toString (listGetInt st.tsCode pc) ++ "\t\t" ++ showIntList st.tsStack))
+    StateT.lift (IO.println (toString (listGetInt st.tsCode pc) ++ "\t\t" ++ showIntList st.tsStack))
     traceTAM'
 
 def traceTAM (prog : List TAMInst) : IO Stack := do
-  let (_, st) ← appT traceTAM' (initialState prog)
+  let (_, st) ← StateT.run traceTAM' (initialState prog)
   return st.tsStack

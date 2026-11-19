@@ -27,8 +27,9 @@ the user. The agent implemented the requested changes unless marked deferred.
   `many p = some p <|> pure []`:
   `(List.cons <$> p <*> many p) <|> pure []`. It remains `partial` because a
   nullable `p` loops, exactly as in Haskell.
-- **`StateIO` instances.** Wrote the `Functor` and `Monad` bodies with `do`
-  (`let (x, s') ← st s`), matching the Haskell `StateIO` instances.
+- **State monads.** Removed the custom `St`/`StateIO` wrapper; the port uses
+  Lean's `StateM`/`StateT` directly (`get`/`set`/`modify`, `StateT.run`,
+  `StateT.lift`).
 - **`Show` for stack modes.** Added `ToString` and a custom `Repr` for both
   `StackMode` and `AddressOperation`, matching Haskell's `Show`:
   `SB`/`LB`, `+`/`-`. Removed `showStackMode`/`showAddressOperation`; the
@@ -37,9 +38,6 @@ the user. The agent implemented the requested changes unless marked deferred.
 - **`operator` shape.** Rewrote `MTParser.operator` to map the operator list to
   parsers and then fold with `<|>`, matching
   `foldl (<|>) empty $ map (…) ops`.
-- **Future state-monad move.** Recorded (in `State.lean` and the README) that the
-  custom `St`/`StateIO` should later be replaced by Lean's `StateM`/`StateT`
-  (`get`/`set`/`modify`, `MonadState`/`MonadLift`).
 
 ## User's manual edits
 
@@ -59,11 +57,10 @@ sources are untracked, so there is no tracked baseline to diff against.)*
 ## Discussed, unchanged or deferred
 
 - Switch the parser input from `Str` to `String.Slice` (O(1) slicing/positions).
-- Replace `St`/`StateIO` with `StateM`/`StateT` (see the note in `State.lean`).
 - `arg0` could be `token $ caseless s *> pure i` instead of a `do` block (Lean's
   `>>` is not monadic `>>`; `*>` is the equivalent).
 - Kept `Parser` as a `def` type synonym rather than a `structure`/`inductive`
-  wrapper, and `StateIO` as a `def` rather than a nominal wrapper.
+  wrapper.
 - Known gaps left as-is: ASCII-only `Char` predicates vs Unicode `Data.Char`,
   64-bit `Int` vs arbitrary precision, `readInt` decimal-only, `1/0 = 0`, and
   `Fuzzer.hs` removed.

@@ -6,7 +6,6 @@ defaultTargets = ["mtc"]
 name = "mtcompiler"
 roots = [
   "Parser",
-  "State",
   "MTParser",
   "TypeChecker",
   "CodeGenerator",
