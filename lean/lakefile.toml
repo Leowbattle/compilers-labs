@@ -11,7 +11,6 @@ roots = [
   "CodeGenerator",
   "TAMParser",
   "TAMVirtualMachine",
-  "IntParserStyles",
 ]
 
 [[lean_exe]]
