@@ -60,9 +60,6 @@ sources are untracked, so there is no tracked baseline to diff against.)*
 
 - Switch the parser input from `Str` to `String.Slice` (O(1) slicing/positions).
 - Replace `St`/`StateIO` with `StateM`/`StateT` (see the note in `State.lean`).
-- Use `open` on the inductive namespaces in the next commit to remove repeated
-  `Type.Constructor` qualification (watch for `Expr.Identifier` vs the
-  `Identifier` abbrev, `TAMInst.LOAD` vs `LOADL`, etc.).
 - `arg0` could be `token $ caseless s *> pure i` instead of a `do` block (Lean's
   `>>` is not monadic `>>`; `*>` is the equivalent).
 - Kept `Parser` as a `def` type synonym rather than a `structure`/`inductive`
