@@ -70,6 +70,21 @@ They do not change the observable behaviour of well-formed programs.
   `0`.
 - **Input.** Lean's `FS.Stream.getLine` keeps the line break, so the VM trims
   the line before parsing it with `String.toInt?`.
+- **Whole-input parsing.** `parseMT` and `parseTAM` accept a result only when it
+  consumes the entire source. The Haskell parsers take the first prefix result,
+  so a valid program followed by trailing garbage used to be accepted; it is now
+  a parse error. Well-formed files are unaffected, and trailing whitespace is
+  still accepted because the token parsers consume it. `parseExact` in
+  `Parser.lean` filters the raw parser results to those with an empty remainder.
+  The corresponding theorems are:
+
+  ```lean
+  theorem parseMT_consumes (s : String) (p : Program)
+      (h : parseMT s = .ok p) : (p, []) ∈ parse program s
+
+  theorem parseTAM_consumes (s : String) (code : List TAMInst)
+      (h : parseTAM s = .ok code) : (code, []) ∈ parse insts s
+  ```
 
 ## Validation
 
@@ -86,3 +101,15 @@ grep -R "panic!" lean/*.lean
 grep -R "partial def" lean/*.lean
 # only execTAM and traceTAM' should remain partial
 ```
+
+For whole-input parsing, run the regression script from the repository root:
+
+```sh
+tests/whole_input_test.sh
+# also compile the external generated corpus, if available:
+CORPUS_DIR=/path/to/perf-compare/bench/programs tests/whole_input_test.sh
+```
+
+It checks valid `.mt` and `.tam` inputs, rejects trailing garbage in both
+languages, accepts trailing whitespace, and optionally compiles every generated
+benchmark program.

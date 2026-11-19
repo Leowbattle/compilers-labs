@@ -74,6 +74,20 @@ def instTAM : Parser TAMInst :=
 def insts : Parser (List TAMInst) := many instTAM
 
 def parseTAM (src : String) : Except String (List TAMInst) :=
-  match parse insts src with
-  | (code, _) :: _ => .ok code
+  match parseExact insts src with
+  | code :: _ => .ok code
   | [] => .error "parse error"
+
+/-- Successful `parseTAM` results consume the entire input. -/
+theorem parseTAM_consumes (src : String) (code : List TAMInst)
+    (h : parseTAM src = .ok code) :
+    (code, []) ∈ parse insts src := by
+  unfold parseTAM at h
+  split at h
+  · rename_i t ts hx
+    have hp : t ∈ parseExact insts src := by
+      rw [hx]
+      exact List.mem_cons_self
+    cases h
+    exact mem_parseExact hp
+  · simp at h

@@ -297,6 +297,19 @@ def program : Parser Program := do
   return LetIn ds c
 
 def parseMT (s : String) : Except String Program :=
-  match parse program s with
-  | (t, _) :: _ => .ok t
+  match parseExact program s with
+  | t :: _ => .ok t
   | [] => .error "parse error"
+
+/-- Successful `parseMT` results consume the entire input. -/
+theorem parseMT_consumes (s : String) (p : Program) (h : parseMT s = .ok p) :
+    (p, []) ∈ parse program s := by
+  unfold parseMT at h
+  split at h
+  · rename_i t ts hx
+    have hp : t ∈ parseExact program s := by
+      rw [hx]
+      exact List.mem_cons_self
+    cases h
+    exact mem_parseExact hp
+  · simp at h
