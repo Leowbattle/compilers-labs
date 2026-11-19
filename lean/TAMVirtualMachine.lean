@@ -56,9 +56,7 @@ def counterT : TAMSt Int := do
 def instructionT : TAMSt TAMInst := do
   let st ← get
   let pc ← counterT
-  match listGet st.tsCode pc with
-  | .ok inst => return inst
-  | .error e => throw e
+  liftExcept (listGet st.tsCode pc)
 
 def countUpdateT (c : Int) : TAMSt Unit := do
   let ts ← get
@@ -74,11 +72,9 @@ def pushT (x : Int) : TAMSt Unit := do
 
 def popT : TAMSt Int := do
   let ts ← get
-  match tsPop ts with
-  | .ok (x, ts') =>
-      set ts'
-      return x
-  | .error e => throw e
+  let (x, ts') ← liftExcept (tsPop ts)
+  set ts'
+  return x
 
 def findLabelIdx : Nat → List TAMInst → Label → Option Nat
   | _, [], _ => none
@@ -110,9 +106,8 @@ def boolNot (x : Int) : Int :=
 
 def jumpToLabel (l : Label) : TAMSt Unit := do
   let st ← get
-  match lookupLabel st.tsCode l with
-  | .ok i => countUpdateT i
-  | .error e => throw e
+  let i ← liftExcept (lookupLabel st.tsCode l)
+  countUpdateT i
 
 def varLookup (mode : StackMode) (op : AddressOperation) (a : Int) : TAMSt Int := do
   let st ← get

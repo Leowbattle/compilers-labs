@@ -288,14 +288,11 @@ def compileProgram : Program → Gen (List TAMInst)
       let funcCode ← List.flatten <$> decls.mapM (compileFunction v)
       return (initCode ++ cmdCode ++ [HALT] ++ funcCode)
 
-def compileMT (s : String) : Except String (List TAMInst × Error) :=
-  match parseMT s with
-  | .error e => .error e
-  | .ok ast =>
-      let err := (StateT.run (checkProgram ast) []).1
-      if err == "" then
-        match StateT.run (compileProgram ast) 0 with
-        | .ok (inst, _) => .ok (inst, err)
-        | .error e => .error e
-      else
-        .ok ([], err)
+def compileMT (s : String) : Except String (List TAMInst × Error) := do
+  let ast ← parseMT s
+  let err := (StateT.run (checkProgram ast) []).1
+  if err == "" then
+    let (inst, _) ← StateT.run (compileProgram ast) 0
+    return (inst, err)
+  else
+    return ([], err)

@@ -19,6 +19,9 @@ def removeExtension (s : String) : Option String :=
   | _ :: tl => some (String.ofList tl.reverse)
   | [] => none
 
+-- Possible future cleanup: use `ExceptT String IO` and `do` here. The
+-- `compileMT` and `removeExtension` results are in different monads, so that
+-- refactor is currently more machinery than it is worth.
 def runCompiler (srcFile : String) : IO Unit := do
   let src ← IO.FS.readFile srcFile
   match compileMT src with
