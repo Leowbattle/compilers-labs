@@ -54,6 +54,37 @@ the user. The agent implemented the requested changes unless marked deferred.
 *(Only manual code edits identifiable from the working tree are listed; the Lean
 sources are untracked, so there is no tracked baseline to diff against.)*
 
+## Parser representation decision
+
+Decision: keep the parser input as `Str := List Char`. Do not migrate the
+production parser to `String.Slice` or `Std.Internal.Parsec` for now.
+
+`IntParserStyles.lean` is the supporting experiment: the same signed-integer
+parser and unrestricted round-trip theorem in three styles. Nonblank line
+counts (implementation / proof):
+
+| style | implementation | proof | total |
+|---|---:|---:|---:|
+| `ListChar` | 31 | 52 | 83 |
+| `String.Slice` | 29 | 90 | 119 |
+| `Std.Internal.Parsec` | 18 | 83 | 101 |
+
+The counts exclude 18 shared setup lines and include proof helper lemmas.
+`LeanParsec` is shorter to implement because it reuses Std's parser type, but
+its proof is still large because it must reason about slices, positions, and
+`ParseResult` directly.
+
+Reasons for keeping `List Char`:
+
+- The production integer parser already uses the total `splitWhile` helper, not
+  the partial `many`; the experiment now reflects that.
+- `List Char` gives the shortest and most direct proof, with no `Slice.copy` or
+  position reasoning.
+- It keeps the existing parser close to the Haskell port and avoids mixing a
+  representation migration with the remaining parser work.
+- The experiment only covers integer literals. It does not measure the rest of
+  the parser, where `many` and other partial functions are still used.
+
 ## Discussed, unchanged or deferred
 
 - Switch the parser input from `Str` to `String.Slice` (O(1) slicing/positions).
@@ -61,6 +92,11 @@ sources are untracked, so there is no tracked baseline to diff against.)*
   `>>` is not monadic `>>`; `*>` is the equivalent).
 - Kept `Parser` as a `def` type synonym rather than a `structure`/`inductive`
   wrapper.
+- Parser comparison experiment (`IntParserStyles.lean`): same signed-literal
+  parser over `List Char`, `String.Slice`, and `Std.Internal.Parsec.String`,
+  with a full round-trip proof for every sign and every `Nat`. Digit scanning
+  is done with total loops instead of `many`; the Parsec version uses the
+  low-level `Parser`/`ParseResult` interface.
 - Known gaps left as-is: ASCII-only `Char` predicates vs Unicode `Data.Char`,
   64-bit `Int` vs arbitrary precision, `readInt` decimal-only, `1/0 = 0`, and
   `Fuzzer.hs` removed.
