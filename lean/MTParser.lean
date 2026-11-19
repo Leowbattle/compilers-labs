@@ -99,14 +99,22 @@ def identifier : Parser Identifier := do
   let s : Str := c :: cs
   return String.ofList s
 
-partial def separatedBy {α : Type} (p : Parser α) (s : String) : Parser (List α) :=
-  (do
-    let x ← p
-    let _ ← token (string s)
-    let xs ← separatedBy p s
-    return (x :: xs)) <|>
-  ((fun x => [x]) <$> p) <|>
-  return []
+/--
+A total separated list.
+
+The recursive call is made through `parserFix`, so it only runs on a strictly
+shorter suffix. If the element parser succeeds but the separator does not
+consume input, the result stops with the single element.
+-/
+def separatedBy {α : Type} (p : Parser α) (s : String) : Parser (List α) :=
+  parserFix fun self => fun src =>
+    (p src).flatMap fun (x, rest) =>
+      match token (string s) rest with
+      | [] => [([x], rest)]
+      | (_, rest') :: _ =>
+          let xs := self rest'
+          if xs.isEmpty then [([x], rest)]
+          else xs.map fun (ys, rest'') => (x :: ys, rest'')
 
 def parenList {α : Type} (opn : String) (p : Parser α) (cls : String) : Parser (List α) := do
   let _ ← token (string opn)
@@ -114,40 +122,52 @@ def parenList {α : Type} (opn : String) (p : Parser α) (cls : String) : Parser
   let _ ← token (string cls)
   return xs
 
-mutual
-  partial def expr : Parser Expr := condExp <|> orExp
+/-! ### Total recursive expression grammar
 
-  partial def condExp : Parser Expr := do
-    let cond ← orExp
-    let _ ← token (string "?")
-    let x ← orExp
-    let _ ← token (string ":")
-    let y ← expr
-    return Conditional cond x y
+`expr` is the only fixed point. `termFor` turns a parser for nested
+expressions into a term parser; its own negative/term recursion is another
+fixed point. This keeps all recursion on the input-length measure without a
+fuel parameter.
+-/
 
-  partial def orExp : Parser Expr := operator [("||", BinOr)] andExp
+def mexpWith (termP : Parser Expr) : Parser Expr :=
+  operator [("*", Multiplication), ("/", Division)] termP
 
-  partial def andExp : Parser Expr := operator [("&&", BinAnd)] notExp
+def addExpWith (termP : Parser Expr) : Parser Expr :=
+  operator [("+", Addition), ("-", Subtraction)] (mexpWith termP)
 
-  partial def notExp : Parser Expr :=
-    (do
-      let _ ← token (string "!")
-      let e ← term
-      return UnOp UnNot e) <|>
-    compExp
+def compExpWith (termP : Parser Expr) : Parser Expr :=
+  operator
+    [("<", Less), ("<=", LessEq), (">", Greater),
+     (">=", GreaterEq), ("==", Equals), ("!=", NotEquals)]
+    (addExpWith termP)
 
-  partial def compExp : Parser Expr := operator [("<", Less),
-                                                  ("<=", LessEq),
-                                                  (">", Greater),
-                                                  (">=", GreaterEq),
-                                                  ("==", Equals),
-                                                  ("!=", NotEquals)] addExp
+def notExpWith (termP : Parser Expr) : Parser Expr :=
+  (do
+    let _ ← token (string "!")
+    let e ← termP
+    return UnOp UnNot e) <|>
+  compExpWith termP
 
-  partial def addExp : Parser Expr := operator [("+", Addition), ("-", Subtraction)] mexp
+def andExpWith (termP : Parser Expr) : Parser Expr :=
+  operator [("&&", BinAnd)] (notExpWith termP)
 
-  partial def mexp : Parser Expr := operator [("*", Multiplication), ("/", Division)] term
+def orExpWith (termP : Parser Expr) : Parser Expr :=
+  operator [("||", BinOr)] (andExpWith termP)
 
-  partial def term : Parser Expr := token (do
+def condExpWith (exprP termP : Parser Expr) : Parser Expr := do
+  let cond ← orExpWith termP
+  let _ ← token (string "?")
+  let x ← orExpWith termP
+  let _ ← token (string ":")
+  let y ← exprP
+  return Conditional cond x y
+
+def exprBody (exprP termP : Parser Expr) : Parser Expr :=
+  condExpWith exprP termP <|> orExpWith termP
+
+def termBody (exprP termP : Parser Expr) : Parser Expr :=
+  token (do
     (do
       let _ ← token (string "false")
       return LitBool false) <|>
@@ -156,29 +176,29 @@ mutual
       return LitBool true) <|>
     (do
       let id ← identifier
-      let args ← parenList "(" expr ")"
+      let args ← parenList "(" exprP ")"
       return FunctionCall id args) <|>
     int <|>
     (Expr.Identifier <$> identifier) <|>
     (do
       let _ ← token (string "-")
-      let t ← term
+      let t ← termP
       return UnOp Negation t) <|>
     (do
       let _ ← token (string "(")
-      let e ← expr
+      let e ← exprP
       let _ ← token (string ")")
       return e))
-end
 
-partial def exprs : Parser (List Expr) :=
-  (do
-    let e ← expr
-    let _ ← token (string ",")
-    let es ← exprs
-    return (e :: es)) <|>
-  ((fun e => [e]) <$> expr) <|>
-  pure []
+def termFor (exprP : Parser Expr) : Parser Expr :=
+  parserFix fun termP => termBody exprP termP
+
+def expr : Parser Expr :=
+  parserFix fun exprP => exprBody exprP (termFor exprP)
+
+def term : Parser Expr := termFor expr
+
+-- `exprs` is not used by the grammar; the generic `separatedBy` covers it.
 
 def typeP : Parser MTType :=
   (do
@@ -219,65 +239,55 @@ def declaration : Parser Declaration :=
     let e ← expr
     return FunctionDecl id args ty e)
 
-partial def declarations : Parser (List Declaration) :=
-  (do
-    let d ← declaration
-    let _ ← token (string ";")
-    let ds ← declarations
-    return (d :: ds)) <|>
-  (do
-    let d ← declaration
-    return [d])
+def declarations : Parser (List Declaration) :=
+  separatedBy declaration ";"
 
-mutual
-  partial def command : Parser Command :=
-    (do
-      let _ ← token (string "if")
-      let e ← expr
-      let _ ← token (string "then")
-      let yes ← command
-      let _ ← token (string "else")
-      let no ← command
-      return IfThenElse e yes no) <|>
-    (do
-      let _ ← token (string "while")
-      let e ← expr
-      let _ ← token (string "do")
-      let c ← command
-      return While e c) <|>
-    (do
-      let _ ← token (string "getint")
-      let _ ← token (string "(")
-      let id ← identifier
-      let _ ← token (string ")")
-      return GetInt id) <|>
-    (do
-      let _ ← token (string "printint")
-      let _ ← token (string "(")
-      let e ← expr
-      let _ ← token (string ")")
-      return PrintInt e) <|>
-    (do
-      let _ ← token (string "begin")
-      let cs ← commands
-      let _ ← token (string "end")
-      return BeginEnd cs) <|>
-    (do
-      let id ← identifier
-      let _ ← token (string ":=")
-      let e ← expr
-      return Assignment id e)
+def commandsFor (cmdP : Parser Command) : Parser (List Command) :=
+  separatedBy cmdP ";"
 
-  partial def commands : Parser (List Command) :=
-    (do
-      let c ← command
-      let _ ← token (string ";")
-      let cs ← commands
-      return (c :: cs)) <|>
-    (do
-      let c ← command
-      return [c])
-end
+def commandBody (cmdP : Parser Command) (commandsP : Parser (List Command)) : Parser Command :=
+  (do
+    let _ ← token (string "if")
+    let e ← expr
+    let _ ← token (string "then")
+    let yes ← cmdP
+    let _ ← token (string "else")
+    let no ← cmdP
+    return IfThenElse e yes no) <|>
+  (do
+    let _ ← token (string "while")
+    let e ← expr
+    let _ ← token (string "do")
+    let c ← cmdP
+    return While e c) <|>
+  (do
+    let _ ← token (string "getint")
+    let _ ← token (string "(")
+    let id ← identifier
+    let _ ← token (string ")")
+    return GetInt id) <|>
+  (do
+    let _ ← token (string "printint")
+    let _ ← token (string "(")
+    let e ← expr
+    let _ ← token (string ")")
+    return PrintInt e) <|>
+  (do
+    let _ ← token (string "begin")
+    let cs ← commandsP
+    let _ ← token (string "end")
+    return BeginEnd cs) <|>
+  (do
+    let id ← identifier
+    let _ ← token (string ":=")
+    let e ← expr
+    return Assignment id e)
+
+def command : Parser Command :=
+  parserFix fun cmdP => commandBody cmdP (commandsFor cmdP)
+
+def commands : Parser (List Command) :=
+  commandsFor command
 
 def program : Parser Program := do
   let _ ← token (string "let")
@@ -286,7 +296,7 @@ def program : Parser Program := do
   let c ← command
   return LetIn ds c
 
-def parseMT (s : String) : Program :=
+def parseMT (s : String) : Except String Program :=
   match parse program s with
-  | (t, _) :: _ => t
-  | [] => panic! "parseMT: no parse"
+  | (t, _) :: _ => .ok t
+  | [] => .error "parse error"

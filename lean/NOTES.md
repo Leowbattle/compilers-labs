@@ -38,6 +38,12 @@ the user. The agent implemented the requested changes unless marked deferred.
 - **`operator` shape.** Rewrote `MTParser.operator` to map the operator list to
   parsers and then fold with `<|>`, matching
   `foldl (<|>) empty $ map (…) ops`.
+- **Remove panics and partial functions.** The parser, type checker, and code
+  generator are total and return explicit errors instead of using `panic!`.
+  `many` and recursive-descent parsers recurse only on strictly shorter input;
+  there is no fuel parameter. The VM loop (`execTAM` / `traceTAM'`) remains
+  `partial` by design. Division by zero is a runtime error, and `Int` stays
+  arbitrary precision.
 
 ## User's manual edits
 

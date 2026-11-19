@@ -20,6 +20,12 @@ def label : Parser String := do
   let cs : Str ← many (satisfy item fun c => !c.isWhitespace)
   return String.ofList cs
 
+def stackModeP : Parser StackMode :=
+  (string "SB" *> pure StackBase) <|> (string "LB" *> pure LocalBase)
+
+def addressOperationP : Parser AddressOperation :=
+  (string "+" *> pure Plus) <|> (string "-" *> pure Minus)
+
 def instTAM : Parser TAMInst :=
   arg1 "LOADL" LOADL natural <|>
   arg0 "ADD" ADD <|>
@@ -50,40 +56,24 @@ def instTAM : Parser TAMInst :=
   (do
     let _ ← token (string "LOAD")
     let _ ← token (string "[")
-    let modeS ← token (string "SB" <|> string "LB")
-    let opS ← token (string "+" <|> string "-")
+    let mode ← token stackModeP
+    let op ← token addressOperationP
     let offset ← token natural
     let _ ← token (string "]")
-    let mode := match modeS with
-      | "SB" => StackBase
-      | "LB" => LocalBase
-      | _ => panic! "instTAM: invalid stack mode"
-    let op := match opS with
-      | "+" => Plus
-      | "-" => Minus
-      | _ => panic! "instTAM: invalid address operation"
     return LOAD mode op offset) <|>
 
   (do
     let _ ← token (string "STORE")
     let _ ← token (string "[")
-    let modeS ← token (string "SB" <|> string "LB")
-    let opS ← token (string "+" <|> string "-")
+    let mode ← token stackModeP
+    let op ← token addressOperationP
     let offset ← token natural
     let _ ← token (string "]")
-    let mode := match modeS with
-      | "SB" => StackBase
-      | "LB" => LocalBase
-      | _ => panic! "instTAM: invalid stack mode"
-    let op := match opS with
-      | "+" => Plus
-      | "-" => Minus
-      | _ => panic! "instTAM: invalid address operation"
     return STORE mode op offset)
 
 def insts : Parser (List TAMInst) := many instTAM
 
-def parseTAM (src : String) : List TAMInst :=
+def parseTAM (src : String) : Except String (List TAMInst) :=
   match parse insts src with
-  | (code, _) :: _ => code
-  | [] => panic! "parseTAM: no parse"
+  | (code, _) :: _ => .ok code
+  | [] => .error "parse error"

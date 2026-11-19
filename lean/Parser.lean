@@ -31,6 +31,18 @@ instance : Alternative Parser where
 def splitWhile (pred : Char → Bool) (s : Str) : Str × Str :=
   (s.takeWhile pred, s.dropWhile pred)
 
+/--
+A total fixed-point combinator for parsers.
+
+The recursive parser may only call itself on strictly shorter input; a call on
+the same or a longer input returns no results. This makes recursive grammars
+total without a separate fuel parameter.
+-/
+def parserFix {α : Type} (f : Parser α → Parser α) : Parser α
+  | src =>
+      f (fun s => if _h : s.length < src.length then parserFix f s else []) src
+termination_by src => src.length
+
 def item : Parser Char := fun src =>
   match src with
   | [] => []
@@ -89,8 +101,15 @@ def token {α : Type} (p : Parser α) : Parser α := do
   return v
 
 /--
-`many p = some p <|> pure []`, where `some p = (:) <$> p <*> many p`,
-exactly as in `Control.Applicative`.
+`many p` is total. It only recurses when `p` consumes input; if `p` succeeds
+without making progress, the result list stops. This is the same behaviour for
+every consuming parser used by the compiler and avoids a separate fuel
+parameter.
 -/
-partial def many {α : Type} (p : Parser α) : Parser (List α) :=
-  (List.cons <$> p <*> many p) <|> pure []
+def many {α : Type} (p : Parser α) : Parser (List α) :=
+  parserFix fun self => fun src =>
+    match p src with
+    | [] => [([], src)]
+    | results =>
+        results.flatMap fun (a, rest) =>
+          (self rest).map fun (as, rest') => (a :: as, rest')
