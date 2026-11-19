@@ -61,6 +61,8 @@ sources are untracked, so there is no tracked baseline to diff against.)*
   `>>` is not monadic `>>`; `*>` is the equivalent).
 - Kept `Parser` as a `def` type synonym rather than a `structure`/`inductive`
   wrapper.
+- Parser representation decision: see
+  `adr/0001-int-parser-representation/README.md`.
 - Known gaps left as-is: ASCII-only `Char` predicates vs Unicode `Data.Char`,
   64-bit `Int` vs arbitrary precision, `readInt` decimal-only, `1/0 = 0`, and
   `Fuzzer.hs` removed.
