@@ -13,6 +13,39 @@ def Parser (α : Type) : Type := Str → List (α × Str)
 
 def parse {α : Type} (p : Parser α) (src : String) : List (α × Str) := p src.toList
 
+/-- Keep only parser results that consume the entire input. -/
+def exactResult {α : Type} : α × Str → Option α
+  | (v, []) => some v
+  | (_, _ :: _) => none
+
+/--
+Run a parser and return the values of the results that consume all of `src`.
+
+The order of the underlying parser is preserved; only results with a non-empty
+remainder are discarded. Unlike Haskell-style prefix parsing, a successful
+result therefore always consumes the whole source.
+-/
+def parseExact {α : Type} (p : Parser α) (src : String) : List α :=
+  (parse p src).filterMap exactResult
+
+/-- A result kept by `exactResult` is exactly the value paired with no input. -/
+theorem exactResult_eq_some {α : Type} {r : α × Str} {v : α}
+    (h : exactResult r = some v) : r = (v, []) := by
+  obtain ⟨w, rest⟩ := r
+  cases rest with
+  | nil => cases h; rfl
+  | cons c cs => simp [exactResult] at h
+
+/-- Every value returned by `parseExact` has a whole-input parser result. -/
+theorem mem_parseExact {α : Type} {p : Parser α} {src : String} {v : α}
+    (h : v ∈ parseExact p src) : (v, []) ∈ parse p src := by
+  unfold parseExact at h
+  rw [List.mem_filterMap] at h
+  obtain ⟨r, hr, hfr⟩ := h
+  have hr' := exactResult_eq_some hfr
+  rw [hr'] at hr
+  exact hr
+
 instance : Functor Parser where
   map f p := fun src => (p src).map fun (v, src') => (f v, src')
 

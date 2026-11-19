@@ -44,6 +44,13 @@ the user. The agent implemented the requested changes unless marked deferred.
   there is no fuel parameter. The VM loop (`execTAM` / `traceTAM'`) remains
   `partial` by design. Division by zero is a runtime error, and `Int` stays
   arbitrary precision.
+- **Whole-input parsing.** `parseMT` and `parseTAM` now require the complete
+  source to be consumed, using `parseExact` in `Parser.lean`. This is an
+  intentional behaviour change from the Haskell prefix parsers: trailing
+  garbage after a valid program or TAM file is now rejected, while trailing
+  whitespace is still consumed by the token parsers. Added the soundness
+  theorems `parseMT_consumes` and `parseTAM_consumes`, plus
+  `tests/whole_input_test.sh`.
 
 ## User's manual edits
 
