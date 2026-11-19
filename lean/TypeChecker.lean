@@ -12,88 +12,101 @@ open Expr (LitInteger LitBool BinOp UnOp Conditional FunctionCall)
 abbrev VarContext := List (String × VFType)
 abbrev Error := String
 
-def pExpr (s : String) : Expr :=
-  match parse expr s with
-  | (e, _) :: _ => e
-  | [] => panic! "pExpr: no parse"
+def typeCheckBinOp (rec : Expr → Option VFType)
+    (x y : Expr) (targ tret : MTType) : Option VFType := do
+  let tx ← rec x
+  let ty ← rec y
+  if tx == ty && tx == VarType targ then
+    return (VarType tret)
+  else
+    none
 
-mutual
-  partial def typeCheckBinOp (vars : VarContext) (x y : Expr) (targ tret : MTType) : Option VFType := do
-    let tx ← typeCheckExpr vars x
-    let ty ← typeCheckExpr vars y
-    if tx == ty && tx == VarType targ then
-      return (VarType tret)
-    else
-      none
+def typeCheckBody (vars : VarContext) (rec : Expr → Option VFType) :
+    Expr → Option VFType
+  | Expr.Identifier id => List.lookup id vars
+  | LitInteger _ => some (VarType TyInt)
+  | LitBool _ => some (VarType TyBool)
 
-  partial def typeCheckExpr (vars : VarContext) (e : Expr) : Option VFType :=
-    match e with
-    | Expr.Identifier id => List.lookup id vars
-    | LitInteger _ => some (VarType TyInt)
-    | LitBool _ => some (VarType TyBool)
+  | BinOp Addition x y => typeCheckBinOp rec x y TyInt TyInt
+  | BinOp Subtraction x y => typeCheckBinOp rec x y TyInt TyInt
+  | BinOp Multiplication x y => typeCheckBinOp rec x y TyInt TyInt
+  | BinOp Division x y => typeCheckBinOp rec x y TyInt TyInt
 
-    | BinOp Addition x y => typeCheckBinOp vars x y TyInt TyInt
-    | BinOp Subtraction x y => typeCheckBinOp vars x y TyInt TyInt
-    | BinOp Multiplication x y => typeCheckBinOp vars x y TyInt TyInt
-    | BinOp Division x y => typeCheckBinOp vars x y TyInt TyInt
+  | BinOp BinAnd x y => typeCheckBinOp rec x y TyBool TyBool
+  | BinOp BinOr x y => typeCheckBinOp rec x y TyBool TyBool
 
-    | BinOp BinAnd x y => typeCheckBinOp vars x y TyBool TyBool
-    | BinOp BinOr x y => typeCheckBinOp vars x y TyBool TyBool
+  | BinOp Less x y => typeCheckBinOp rec x y TyInt TyBool
+  | BinOp LessEq x y => typeCheckBinOp rec x y TyInt TyBool
+  | BinOp Greater x y => typeCheckBinOp rec x y TyInt TyBool
+  | BinOp GreaterEq x y => typeCheckBinOp rec x y TyInt TyBool
 
-    | BinOp Less x y => typeCheckBinOp vars x y TyInt TyBool
-    | BinOp LessEq x y => typeCheckBinOp vars x y TyInt TyBool
-    | BinOp Greater x y => typeCheckBinOp vars x y TyInt TyBool
-    | BinOp GreaterEq x y => typeCheckBinOp vars x y TyInt TyBool
+  | BinOp Equals x y => do
+      let tx ← rec x
+      let ty ← rec y
+      if tx == ty then
+        return (VarType TyBool)
+      else
+        none
 
-    | BinOp Equals x y => do
-        let tx ← typeCheckExpr vars x
-        let ty ← typeCheckExpr vars y
-        if tx == ty then
-          return (VarType TyBool)
-        else
-          none
+  | BinOp NotEquals x y => do
+      let tx ← rec x
+      let ty ← rec y
+      if tx == ty then
+        return (VarType TyBool)
+      else
+        none
 
-    | BinOp NotEquals x y => do
-        let tx ← typeCheckExpr vars x
-        let ty ← typeCheckExpr vars y
-        if tx == ty then
-          return (VarType TyBool)
-        else
-          none
+  | UnOp Negation x => do
+      let tx ← rec x
+      if tx == VarType TyInt then
+        return (VarType TyInt)
+      else
+        none
 
-    | UnOp Negation x => do
-        let tx ← typeCheckExpr vars x
-        if tx == VarType TyInt then
-          return (VarType TyInt)
-        else
-          none
+  | UnOp UnNot x => do
+      let tx ← rec x
+      if tx == VarType TyBool then
+        return (VarType TyBool)
+      else
+        none
 
-    | UnOp UnNot x => do
-        let tx ← typeCheckExpr vars x
-        if tx == VarType TyBool then
-          return (VarType TyBool)
-        else
-          none
+  | Conditional cond x y => do
+      let tcond ← rec cond
+      let tx ← rec x
+      let ty ← rec y
+      if tcond == VarType TyBool && tx == ty then
+        return tx
+      else
+        none
 
-    | Conditional cond x y => do
-        let tcond ← typeCheckExpr vars cond
-        let tx ← typeCheckExpr vars x
-        let ty ← typeCheckExpr vars y
-        if tcond == VarType TyBool && tx == ty then
-          return tx
-        else
-          none
+  | FunctionCall id args => do
+      let targs ← args.mapM rec
+      match List.lookup id vars with
+      | some (FunType argtypes ret) =>
+          if argtypes.map VarType == targs then
+            return (VarType ret)
+          else
+            none
+      | _ => none
 
-    | FunctionCall id args => do
-        let targs ← args.mapM (typeCheckExpr vars)
-        match List.lookup id vars with
-        | some (FunType argtypes ret) =>
-            if argtypes.map VarType == targs then
-              return (VarType ret)
-            else
-              none
-        | _ => none
-end
+def exprSize : Expr → Nat
+  | Expr.Identifier _ => 1
+  | LitInteger _ => 1
+  | LitBool _ => 1
+  | BinOp _ x y => 1 + exprSize x + exprSize y
+  | UnOp _ x => 1 + exprSize x
+  | Conditional c x y => 1 + exprSize c + exprSize x + exprSize y
+  | FunctionCall _ args => 1 + (args.map exprSize).foldl (· + ·) 0
+
+def typeCheckFix (vars : VarContext) : Expr → Option VFType
+  | e =>
+      typeCheckBody vars
+        (fun x => if _h : exprSize x < exprSize e then typeCheckFix vars x else none)
+        e
+termination_by e => exprSize e
+
+def typeCheckExpr (vars : VarContext) (e : Expr) : Option VFType :=
+  typeCheckFix vars e
 
 def checkDuplicateDecl (vars : VarContext) (d : Declaration) : Error :=
   let name := declName d
@@ -125,7 +138,7 @@ def checkFunction (vars : VarContext) : Declaration → Error
             "Function " ++ id ++ ": Type of expression is different from return type of function\n"
   | _ => ""
 
-partial def checkDecls : List Declaration → StateM VarContext Error
+def checkDecls : List Declaration → StateM VarContext Error
   | [] => pure ""
   | d :: ds =>
       match d with
@@ -162,28 +175,28 @@ def checkCmd (vars : VarContext) : Command → Error
       | some (VarType TyInt) =>
           "If command: test expression is not a boolean\n" ++ checkCmd vars a ++ checkCmd vars b
       | some (VarType TyBool) => checkCmd vars a ++ checkCmd vars b
-      | some (FunType _ _) => panic! "checkCmd: unexpected function type"
+      | some (FunType _ _) => "Command: function used where a value is expected\n"
 
   | While cond cmd =>
       match typeCheckExpr vars cond with
       | none => "While command: test expression does not type check\n"
       | some (VarType TyInt) => "While command: test expression is not a boolean\n"
       | some (VarType TyBool) => checkCmd vars cmd
-      | some (FunType _ _) => panic! "checkCmd: unexpected function type"
+      | some (FunType _ _) => "Command: function used where a value is expected\n"
 
   | GetInt id =>
       match List.lookup id vars with
       | none => "GetInt command: Variable " ++ id ++ " not found\n"
       | some (VarType TyBool) => "GetInt command: Variable " ++ id ++ " not Integer\n"
       | some (VarType TyInt) => ""
-      | some (FunType _ _) => panic! "checkCmd: unexpected function type"
+      | some (FunType _ _) => "Command: function used where a value is expected\n"
 
   | PrintInt expr =>
       match typeCheckExpr vars expr with
       | none => "PrintInt command: Expression does not type check\n"
       | some (VarType TyBool) => "PrintInt command: Expression must have type Integer\n"
       | some (VarType TyInt) => ""
-      | some (FunType _ _) => panic! "checkCmd: unexpected function type"
+      | some (FunType _ _) => "Command: function used where a value is expected\n"
 
   | BeginEnd cmds => String.join (cmds.map (checkCmd vars))
 
@@ -193,7 +206,3 @@ def checkProgram : Program → StateM VarContext Error
       let vars ← get
       let ec := checkCmd vars cmd
       return (ed ++ ec)
-
-def getDecls (s : String) : List Declaration :=
-  match parseMT s with
-  | LetIn ds _ => ds

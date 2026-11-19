@@ -15,15 +15,18 @@ structure TAMState where
   tsLB : Int
   deriving Inhabited, Repr
 
-abbrev TAMSt (α : Type) := StateT TAMState IO α
+abbrev TAMSt (α : Type) := StateT TAMState (ExceptT String IO) α
+
+def liftIO {α : Type} (act : IO α) : TAMSt α :=
+  StateT.lift (ExceptT.lift act)
 
 def tsPush (x : Int) (ts : TAMState) : TAMState :=
   { ts with tsStack := x :: ts.tsStack }
 
-def tsPop (ts : TAMState) : Int × TAMState :=
+def tsPop (ts : TAMState) : Except String (Int × TAMState) :=
   match ts.tsStack with
-  | x :: xs => (x, { ts with tsStack := xs })
-  | [] => panic! "tsPop: empty stack"
+  | x :: xs => .ok (x, { ts with tsStack := xs })
+  | [] => .error "stack underflow"
 
 def tsSetCounter (i : Int) (ts : TAMState) : TAMState :=
   { ts with tsCounter := i }
@@ -35,16 +38,16 @@ def tsSetLBT (lb : Int) : TAMSt Unit := do
   let state ← get
   set (tsSetLB lb state)
 
-def listGetInt {α : Type} [Inhabited α] (l : List α) (i : Int) : α :=
+def listGet {α : Type} (l : List α) (i : Int) : Except String α :=
   if i < 0 then
-    panic! "negative index"
+    .error "negative index"
   else
     match l[i.toNat]? with
-    | some x => x
-    | none => panic! "index too large"
+    | some x => .ok x
+    | none => .error "index too large"
 
-def tsInstruction (ts : TAMState) : TAMInst :=
-  listGetInt ts.tsCode ts.tsCounter
+def tsInstruction (ts : TAMState) : Except String TAMInst :=
+  listGet ts.tsCode ts.tsCounter
 
 def counterT : TAMSt Int := do
   let ts ← get
@@ -53,7 +56,9 @@ def counterT : TAMSt Int := do
 def instructionT : TAMSt TAMInst := do
   let st ← get
   let pc ← counterT
-  return (listGetInt st.tsCode pc)
+  match listGet st.tsCode pc with
+  | .ok inst => return inst
+  | .error e => throw e
 
 def countUpdateT (c : Int) : TAMSt Unit := do
   let ts ← get
@@ -69,9 +74,11 @@ def pushT (x : Int) : TAMSt Unit := do
 
 def popT : TAMSt Int := do
   let ts ← get
-  let (x, ts') := tsPop ts
-  set ts'
-  return x
+  match tsPop ts with
+  | .ok (x, ts') =>
+      set ts'
+      return x
+  | .error e => throw e
 
 def findLabelIdx : Nat → List TAMInst → Label → Option Nat
   | _, [], _ => none
@@ -80,10 +87,10 @@ def findLabelIdx : Nat → List TAMInst → Label → Option Nat
       | LABEL l' => if l == l' then some i else findLabelIdx (i + 1) xs l
       | _ => findLabelIdx (i + 1) xs l
 
-def lookupLabel (prog : List TAMInst) (l : Label) : Int :=
+def lookupLabel (prog : List TAMInst) (l : Label) : Except String Int :=
   match findLabelIdx 0 prog l with
-  | some i => Int.ofNat i
-  | none => panic! "lookupLabel: label not found"
+  | some i => .ok (Int.ofNat i)
+  | none => .error s!"label not found: {l}"
 
 def boolAnd (x y : Int) : Int :=
   match (x, y) with
@@ -103,7 +110,9 @@ def boolNot (x : Int) : Int :=
 
 def jumpToLabel (l : Label) : TAMSt Unit := do
   let st ← get
-  countUpdateT (lookupLabel st.tsCode l)
+  match lookupLabel st.tsCode l with
+  | .ok i => countUpdateT i
+  | .error e => throw e
 
 def varLookup (mode : StackMode) (op : AddressOperation) (a : Int) : TAMSt Int := do
   let st ← get
@@ -114,33 +123,37 @@ def varLookup (mode : StackMode) (op : AddressOperation) (a : Int) : TAMSt Int :
 def getVar (mode : StackMode) (op : AddressOperation) (a : Int) : TAMSt Int := do
   let st ← get
   let addr ← varLookup mode op a
-  return (listGetInt st.tsStack addr)
+  match listGet st.tsStack addr with
+  | .ok x => return x
+  | .error e => throw e
 
 def setVar (a x : Int) : TAMSt Unit := do
+  if a < 0 then
+    throw "negative stack address"
   let ts ← get
   let (as, rest) := ts.tsStack.splitAt a.toNat
   match rest with
   | _ :: bs => set { ts with tsStack := as ++ [x] ++ bs }
-  | [] => panic! "setVar: index out of bounds"
+  | [] => throw "stack address out of bounds"
 
-partial def replicateMT {α : Type} : Nat → TAMSt α → TAMSt (List α)
+def replicateMT {α : Type} : Nat → TAMSt α → TAMSt (List α)
   | 0, _ => return []
   | n + 1, act => do
       let x ← act
       let xs ← replicateMT n act
       return (x :: xs)
 
-partial def replicateMT_ {α : Type} (n : Nat) (act : TAMSt α) : TAMSt Unit :=
+def replicateMT_ {α : Type} (n : Nat) (act : TAMSt α) : TAMSt Unit :=
   match n with
   | 0 => return ()
   | n + 1 => do
       let _ ← act
       replicateMT_ n act
 
-def readInt (s : String) : Int :=
+def readInt (s : String) : Except String Int :=
   match s.trimAscii.toString.toInt? with
-  | some x => x
-  | none => panic! "Prelude.read: no parse"
+  | some x => .ok x
+  | none => .error "Prelude.read: no parse"
 
 def executeT (inst : TAMInst) : TAMSt Unit :=
   match inst with
@@ -169,8 +182,11 @@ def executeT (inst : TAMInst) : TAMSt Unit :=
   | DIV => do
       let x ← popT
       let y ← popT
-      pushT (Int.fdiv y x)
-      continueT
+      if x == 0 then
+        throw "division by zero"
+      else
+        pushT (Int.fdiv y x)
+        continueT
 
   | LSS => do
       let y ← popT
@@ -215,16 +231,19 @@ def executeT (inst : TAMInst) : TAMSt Unit :=
   | HALT => countUpdateT (-1)
 
   | GETINT => do
-      StateT.lift (IO.println "Enter a number: ")
-      let stdin ← StateT.lift IO.getStdin
-      let x ← StateT.lift stdin.getLine
-      pushT (readInt x)
-      continueT
+      liftIO (IO.println "Enter a number: ")
+      let stdin ← liftIO IO.getStdin
+      let x ← liftIO stdin.getLine
+      match readInt x with
+      | .ok n =>
+          pushT n
+          continueT
+      | .error e => throw e
 
   | PUTINT => do
-      StateT.lift (IO.print "output > ")
+      liftIO (IO.print "output > ")
       let x ← popT
-      StateT.lift (IO.println x)
+      liftIO (IO.println x)
       continueT
 
   | LABEL _ => continueT
@@ -280,9 +299,11 @@ def initialState (prog : List TAMInst) : TAMState :=
 def showIntList (xs : List Int) : String :=
   "[" ++ String.intercalate "," (xs.map toString) ++ "]"
 
-def runTAM (prog : List TAMInst) : IO Stack := do
-  let (_, st) ← StateT.run execTAM (initialState prog)
-  return st.tsStack
+def runTAM (prog : List TAMInst) : IO (Except String Stack) := do
+  let r ← ExceptT.run (StateT.run execTAM (initialState prog))
+  match r with
+  | .ok (_, st) => return .ok st.tsStack
+  | .error e => return .error e
 
 partial def traceTAM' : TAMSt Unit := do
   let inst ← instructionT
@@ -292,9 +313,14 @@ partial def traceTAM' : TAMSt Unit := do
   if pc == -1 then
     return ()
   else do
-    StateT.lift (IO.println (toString (listGetInt st.tsCode pc) ++ "\t\t" ++ showIntList st.tsStack))
-    traceTAM'
+    match listGet st.tsCode pc with
+    | .ok inst =>
+        liftIO (IO.println (toString inst ++ "\t\t" ++ showIntList st.tsStack))
+        traceTAM'
+    | .error e => throw e
 
-def traceTAM (prog : List TAMInst) : IO Stack := do
-  let (_, st) ← StateT.run traceTAM' (initialState prog)
-  return st.tsStack
+def traceTAM (prog : List TAMInst) : IO (Except String Stack) := do
+  let r ← ExceptT.run (StateT.run traceTAM' (initialState prog))
+  match r with
+  | .ok (_, st) => return .ok st.tsStack
+  | .error e => return .error e
